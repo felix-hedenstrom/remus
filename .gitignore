@@ -1,0 +1,16 @@
+target/
+project/target/
+project/project/
+*.class
+*.log
+.bloop/
+.metals/
+.bsp/
+metals.sbt
+*.sqlite
+*.sqlite-journal
+data/
+modules/server/src/main/resources/static/main.js
+modules/server/src/main/resources/static/main.js.map
+.DS_Store
+node_modules/

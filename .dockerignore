@@ -1,0 +1,9 @@
+.git
+target
+project/target
+project/project
+.bloop
+.metals
+.bsp
+data
+*.sqlite
