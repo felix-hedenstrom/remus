@@ -82,7 +82,12 @@ object CharacterEditorView:
         labelText
       )
 
-    def attributeBlock(name: String, get: Attributes => AttributeScore, set: (Attributes, AttributeScore) => Attributes) =
+    def attributeBlock(
+      name: String,
+      conditionLabel: String,
+      get: Attributes => AttributeScore,
+      set: (Attributes, AttributeScore) => Attributes
+    ) =
       div(
         cls := "attribute",
         div(cls := "attribute-name", name),
@@ -103,32 +108,54 @@ object CharacterEditorView:
               update(s => s.copy(attributes = set(s.attributes, get(s.attributes).copy(distressed = v))))
             )
           ),
-          "Påverkad"
+          conditionLabel
         )
       )
 
-    def resourceTrack(name: String, get: Resources => ResourceTrack, set: (Resources, ResourceTrack) => Resources) =
-      div(
-        cls := "resource",
+    def resourceTrack(
+      name: String,
+      pipClass: String,
+      get: Resources => ResourceTrack,
+      set: (Resources, ResourceTrack) => Resources,
+      extra: Modifier[Div]*
+    ) =
+      val mods: Seq[Modifier[Div]] = Seq(
+        cls := s"resource-track $pipClass",
         div(cls := "resource-name", name),
-        input(
-          typ := "number",
-          cls := "resource-value",
-          value <-- sheetVar.signal.map(_.map(s => get(s.resources).current.toString).getOrElse("0")),
-          onInput.mapToValue --> (v =>
-            update(s => s.copy(resources = set(s.resources, get(s.resources).copy(current = parseNonNegative(v)))))
-          )
+        div(
+          cls := "pip-row",
+          children <-- sheetVar.signal.map { sheetOpt =>
+            val track   = sheetOpt.map(s => get(s.resources))
+            val max     = track.map(_.max.toInt).getOrElse(0)
+            val current = track.map(_.current.toInt).getOrElse(0)
+            (1 to max).map { i =>
+              div(
+                cls := ("pip" + (if i <= current then " filled" else "")),
+                onClick --> (_ =>
+                  update { s =>
+                    val t          = get(s.resources)
+                    val newCurrent = if t.current.toInt == i then i - 1 else i
+                    s.copy(resources = set(s.resources, t.copy(current = parseNonNegative(newCurrent.toString))))
+                  }
+                )
+              )
+            }
+          }
         ),
-        span(" / "),
-        input(
-          typ := "number",
-          cls := "resource-value",
-          value <-- sheetVar.signal.map(_.map(s => get(s.resources).max.toString).getOrElse("0")),
-          onInput.mapToValue --> (v =>
-            update(s => s.copy(resources = set(s.resources, get(s.resources).copy(max = parseNonNegative(v)))))
+        div(
+          cls := "field field-narrow",
+          label("Max"),
+          input(
+            typ := "number",
+            cls := "resource-max",
+            value <-- sheetVar.signal.map(_.map(s => get(s.resources).max.toString).getOrElse("0")),
+            onInput.mapToValue --> (v =>
+              update(s => s.copy(resources = set(s.resources, get(s.resources).copy(max = parseNonNegative(v)))))
+            )
           )
         )
-      )
+      ) ++ extra
+      div(mods*)
 
     def skillRow(skill: Skill) =
       div(
@@ -199,6 +226,9 @@ object CharacterEditorView:
         button(tpe := "button", "Ta bort", onClick --> (_ => update(s => s.copy(secondarySkills = s.secondarySkills.patch(index, Nil, 1)))))
       )
 
+    val (generalSkillsCol1, generalSkillsCol2) =
+      Skill.generalSkillsOrdered.splitAt((Skill.generalSkillsOrdered.size + 1) / 2)
+
     div(
       cls := "character-editor-view",
       onMountCallback(_ => load()),
@@ -212,8 +242,10 @@ object CharacterEditorView:
         case None => div("Laddar...")
         case Some(_) =>
           div(
+            cls := "sheet-grid",
             div(
-              cls := "header-section",
+              cls := "header-section full-width",
+              h2("Karaktär"),
               textField("Namn", _.header.name, (s, v) => s.copy(header = s.header.copy(name = v))),
               textField("Spelare", _.header.playerName, (s, v) => s.copy(header = s.header.copy(playerName = v))),
               textField("Släkte", _.header.species, (s, v) => s.copy(header = s.header.copy(species = v))),
@@ -223,14 +255,36 @@ object CharacterEditorView:
               textField("Utseende", _.header.appearance, (s, v) => s.copy(header = s.header.copy(appearance = v)))
             ),
             div(
-              cls := "attributes-section",
+              cls := "attributes-section full-width",
               h2("Egenskaper"),
-              attributeBlock("STY", _.strength, (a, v) => a.copy(strength = v)),
-              attributeBlock("FYS", _.constitution, (a, v) => a.copy(constitution = v)),
-              attributeBlock("SMI", _.agility, (a, v) => a.copy(agility = v)),
-              attributeBlock("INT", _.intelligence, (a, v) => a.copy(intelligence = v)),
-              attributeBlock("PSY", _.will, (a, v) => a.copy(will = v)),
-              attributeBlock("KAR", _.charisma, (a, v) => a.copy(charisma = v))
+              attributeBlock("STY", "Utmattad", _.strength, (a, v) => a.copy(strength = v)),
+              attributeBlock("FYS", "Krasslig", _.constitution, (a, v) => a.copy(constitution = v)),
+              attributeBlock("SMI", "Omtöcknad", _.agility, (a, v) => a.copy(agility = v)),
+              attributeBlock("INT", "Arg", _.intelligence, (a, v) => a.copy(intelligence = v)),
+              attributeBlock("PSY", "Rädd", _.will, (a, v) => a.copy(will = v)),
+              attributeBlock("KAR", "Uppgiven", _.charisma, (a, v) => a.copy(charisma = v))
+            ),
+            div(cls := "divider"),
+            div(
+              cls := "skills-section full-width",
+              h2("Färdigheter"),
+              div(
+                cls := "skills-grid",
+                div(cls := "skills-col", children <-- sheetVar.signal.map(_ => generalSkillsCol1.map(skillRow))),
+                div(cls := "skills-col", children <-- sheetVar.signal.map(_ => generalSkillsCol2.map(skillRow)))
+              ),
+              h2("Vapenfärdigheter"),
+              div(
+                cls := "skills-grid",
+                div(cls := "skills-col", children <-- sheetVar.signal.map(_ => Skill.weaponSkillsOrdered.map(skillRow)))
+              ),
+              h2("Sekundära färdigheter"),
+              div(children <-- sheetVar.signal.map(_.map(_.secondarySkills).getOrElse(Nil).zipWithIndex.map { case (sk, i) => secondarySkillRow(i, sk) })),
+              button(
+                tpe := "button",
+                "Lägg till sekundär färdighet",
+                onClick --> (_ => update(s => s.copy(secondarySkills = s.secondarySkills :+ SecondarySkill("", 0))))
+              )
             ),
             div(
               cls := "combat-section",
@@ -242,35 +296,29 @@ object CharacterEditorView:
             div(
               cls := "resources-section",
               h2("Poäng"),
-              resourceTrack("Viljepoäng", _.willpower, (r, v) => r.copy(willpower = v)),
-              resourceTrack("Kroppspoäng", _.bodyPoints, (r, v) => r.copy(bodyPoints = v)),
-              intField(
-                "Lyckade dödsslag",
-                _.resources.deathRolls.successes,
-                (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(successes = v)))
-              ),
-              intField(
-                "Misslyckade dödsslag",
-                _.resources.deathRolls.failures,
-                (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(failures = v)))
+              resourceTrack("Viljepoäng", "willpower", _.willpower, (r, v) => r.copy(willpower = v)),
+              resourceTrack(
+                "Kroppspoäng",
+                "body-points",
+                _.bodyPoints,
+                (r, v) => r.copy(bodyPoints = v),
+                div(
+                  cls := "death-rolls",
+                  intField(
+                    "Lyckade dödsslag",
+                    _.resources.deathRolls.successes,
+                    (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(successes = v)))
+                  ),
+                  intField(
+                    "Misslyckade dödsslag",
+                    _.resources.deathRolls.failures,
+                    (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(failures = v)))
+                  )
+                )
               )
             ),
             div(
-              cls := "skills-section",
-              h2("Färdigheter"),
-              div(cls := "skills-grid", children <-- sheetVar.signal.map(_ => Skill.generalSkillsOrdered.map(skillRow))),
-              h2("Vapenfärdigheter"),
-              div(cls := "skills-grid", children <-- sheetVar.signal.map(_ => Skill.weaponSkillsOrdered.map(skillRow))),
-              h2("Sekundära färdigheter"),
-              div(children <-- sheetVar.signal.map(_.map(_.secondarySkills).getOrElse(Nil).zipWithIndex.map { case (sk, i) => secondarySkillRow(i, sk) })),
-              button(
-                tpe := "button",
-                "Lägg till sekundär färdighet",
-                onClick --> (_ => update(s => s.copy(secondarySkills = s.secondarySkills :+ SecondarySkill("", 0))))
-              )
-            ),
-            div(
-              cls := "abilities-section",
+              cls := "abilities-section full-width",
               h2("Förmågor & besvärjelser"),
               textArea(
                 rows := 6,
@@ -278,31 +326,40 @@ object CharacterEditorView:
                 onInput.mapToValue --> (v => update(s => s.copy(abilitiesText = v)))
               )
             ),
+            div(cls := "divider"),
             div(
               cls := "armor-section",
               h2("Rustning & hjälm"),
-              intField("Skyddsvärde rustning", _.armor.protection, (s, v) => s.copy(armor = s.armor.copy(protection = v))),
-              checkboxField("Nackdel: Smyga", _.armor.penalties.sneaking, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(sneaking = v)))),
-              checkboxField("Nackdel: Undvika", _.armor.penalties.evade, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(evade = v)))),
-              checkboxField(
-                "Nackdel: Hoppa & klättra",
-                _.armor.penalties.acrobatics,
-                (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(acrobatics = v)))
+              div(
+                cls := "armor-row",
+                div(cls := "icon-shield"),
+                intField("Skyddsvärde rustning", _.armor.protection, (s, v) => s.copy(armor = s.armor.copy(protection = v))),
+                checkboxField("Nackdel: Smyga", _.armor.penalties.sneaking, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(sneaking = v)))),
+                checkboxField("Nackdel: Undvika", _.armor.penalties.evade, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(evade = v)))),
+                checkboxField(
+                  "Nackdel: Hoppa & klättra",
+                  _.armor.penalties.acrobatics,
+                  (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(acrobatics = v)))
+                )
               ),
-              intField("Skyddsvärde hjälm", _.armor.helmetProtection, (s, v) => s.copy(armor = s.armor.copy(helmetProtection = v))),
-              checkboxField(
-                "Nackdel: Upptäcka fara",
-                _.armor.helmetPenalties.spotHidden,
-                (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(spotHidden = v)))
-              ),
-              checkboxField(
-                "Nackdel: Avståndsattacker",
-                _.armor.helmetPenalties.rangedAttacks,
-                (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(rangedAttacks = v)))
+              div(
+                cls := "armor-row",
+                div(cls := "icon-helmet"),
+                intField("Skyddsvärde hjälm", _.armor.helmetProtection, (s, v) => s.copy(armor = s.armor.copy(helmetProtection = v))),
+                checkboxField(
+                  "Nackdel: Upptäcka fara",
+                  _.armor.helmetPenalties.spotHidden,
+                  (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(spotHidden = v)))
+                ),
+                checkboxField(
+                  "Nackdel: Avståndsattacker",
+                  _.armor.helmetPenalties.rangedAttacks,
+                  (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(rangedAttacks = v)))
+                )
               )
             ),
             div(
-              cls := "weapons-section",
+              cls := "weapons-section full-width",
               h2("Vapen"),
               div(children <-- sheetVar.signal.map(_.map(_.weapons).getOrElse(Nil).zipWithIndex.map { case (w, i) => weaponRow(i, w) })),
               button(
@@ -312,7 +369,7 @@ object CharacterEditorView:
               )
             ),
             div(
-              cls := "inventory-section",
+              cls := "inventory-section full-width",
               h2("Packning"),
               intField("Bärförmåga", _.inventory.carryCapacity, (s, v) => s.copy(inventory = s.inventory.copy(carryCapacity = v))),
               div(children <-- sheetVar.signal.map(_.map(_.inventory.items).getOrElse(Nil).zipWithIndex.map { case (it, i) => itemRow(i, it) })),
@@ -326,9 +383,9 @@ object CharacterEditorView:
             div(
               cls := "currency-section",
               h2("Pengar"),
-              intField("Guldmynt", _.currency.gold, (s, v) => s.copy(currency = s.currency.copy(gold = v))),
-              intField("Silvermynt", _.currency.silver, (s, v) => s.copy(currency = s.currency.copy(silver = v))),
-              intField("Kopparmynt", _.currency.copper, (s, v) => s.copy(currency = s.currency.copy(copper = v)))
+              div(cls := "currency-pill", intField("Guldmynt", _.currency.gold, (s, v) => s.copy(currency = s.currency.copy(gold = v)))),
+              div(cls := "currency-pill", intField("Silvermynt", _.currency.silver, (s, v) => s.copy(currency = s.currency.copy(silver = v)))),
+              div(cls := "currency-pill", intField("Kopparmynt", _.currency.copper, (s, v) => s.copy(currency = s.currency.copy(copper = v))))
             )
           )
       }
