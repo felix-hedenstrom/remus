@@ -29,9 +29,36 @@ sbt server/copyClientAssets   # links the client with Scala.js and copies
 sbt server/run
 ```
 
-Then open http://localhost:8080. The SQLite database file is created at
-`./data/pellegrino.db` by default (override with the `DB_PATH` env var; port
-via `PORT`).
+Then open http://localhost:8080. There's also an internal admin API on
+http://localhost:8081 (Swagger UI at `/docs`), currently just a scaffold for
+future admin functionality. This port isn't meant to be exposed publicly;
+the Docker setup binds it to `127.0.0.1` only, reachable from the host
+machine but not the network.
+
+Configuration lives in `modules/server/src/main/resources/application.conf`
+(loaded via zio-config), with environment variables overriding the defaults:
+`PORT` (8080), `ADMIN_PORT` (8081), `DB_PATH` (`./data/pellegrino.db`).
+
+Authentication is "Login with Discord" — there's no username/password. You
+need a Discord application (create one at the
+[Discord Developer Portal](https://discord.com/developers/applications)) with
+an OAuth2 redirect registered at
+`http://localhost:8080/api/auth/discord/callback` (or your real host/port).
+`DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` are required, with no
+default — the app fails to start if either is missing. `DISCORD_REDIRECT_URI`
+defaults to `http://localhost:8080/api/auth/discord/callback`; override it to
+match whatever redirect URI you registered with Discord if you're not
+running on localhost:8080.
+
+For local `sbt server/run`, sbt doesn't load `.env` files itself, so export
+these in your shell before running (or use a tool like
+[direnv](https://direnv.net/) with a gitignored `.envrc`):
+
+```sh
+export DISCORD_CLIENT_ID=...
+export DISCORD_CLIENT_SECRET=...
+sbt server/run
+```
 
 Whenever you change client code, re-run `server/copyClientAssets` before
 `server/run` (or before `server/reStart`-style workflows) to refresh the
@@ -52,8 +79,13 @@ Repository tests run against a real temp-file SQLite database (no mocking).
 
 ## Self-hosting with Docker
 
+Copy `docker/.env.example` to `docker/.env` and fill in your Discord OAuth
+credentials — Docker Compose loads it automatically, and it's gitignored so
+secrets never land in the repo.
+
 ```sh
 cd docker
+cp .env.example .env   # fill in DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET
 docker compose up -d --build
 ```
 
@@ -78,7 +110,7 @@ docker/     Dockerfile + docker-compose.yml
 ## Scope
 
 This is a first iteration focused on core character-sheet CRUD: each user
-authenticates with a username/password and owns the characters they create —
-there's no campaign/GM grouping yet. The frontend is intentionally plain
+authenticates via Discord OAuth and owns the characters they create — there's
+no campaign/GM grouping yet. The frontend is intentionally plain
 (no component framework, no client-side routing) since it's expected to be
 reshaped as it gets used at the table.

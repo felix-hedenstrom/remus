@@ -15,14 +15,11 @@ object Api:
   private val backend     = FetchZioBackend()
   private val interpreter = SttpClientInterpreter()
 
-  def register(req: RegisterRequest): Task[Either[ApiError, UserInfo]] =
-    interpreter.toClientThrowDecodeFailures(Endpoints.register, None, backend)(req)
-
-  def login(req: LoginRequest): Task[Either[ApiError, (UserInfo, CookieValueWithMeta)]] =
-    interpreter.toClientThrowDecodeFailures(Endpoints.login, None, backend)(req)
-
   def logout(): Task[Either[ApiError, CookieValueWithMeta]] =
     interpreter.toClientThrowDecodeFailures(Endpoints.logout, None, backend)(None)
+
+  def me(): Task[Either[ApiError, UserInfo]] =
+    interpreter.toSecureClientThrowDecodeFailures(Endpoints.me, None, backend)(None)(())
 
   def listCharacters(): Task[Either[ApiError, List[CharacterSummary]]] =
     interpreter.toSecureClientThrowDecodeFailures(Endpoints.listCharacters, None, backend)(None)(())

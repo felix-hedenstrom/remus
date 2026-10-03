@@ -5,13 +5,19 @@ import zio.test.*
 
 object UserRepoSpec extends ZIOSpecDefault:
   def spec = suite("UserRepo")(
-    test("create and find by username/id") {
+    test("findOrCreateByDiscordId creates on first call and finds by id") {
       for
         repo    <- ZIO.service[UserRepo]
-        created <- repo.create("bob", "hashedpw")
-        byName  <- repo.findByUsername("bob")
+        created <- repo.findOrCreateByDiscordId("discord-bob", "bob")
         byId    <- repo.findById(created.id)
-        missing <- repo.findByUsername("nobody")
-      yield assertTrue(byName.contains(created), byId.contains(created), missing.isEmpty)
+        missing <- repo.findById(created.id + 1_000_000L)
+      yield assertTrue(byId.contains(created), missing.isEmpty)
+    },
+    test("findOrCreateByDiscordId with the same discordId returns the same row and updates the username") {
+      for
+        repo   <- ZIO.service[UserRepo]
+        first  <- repo.findOrCreateByDiscordId("discord-erin", "erin")
+        second <- repo.findOrCreateByDiscordId("discord-erin", "erin-new")
+      yield assertTrue(second.id == first.id, second.username == "erin-new")
     }
   ).provideShared(TestDb.layer, UserRepo.layer)

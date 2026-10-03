@@ -7,10 +7,12 @@ COPY project project
 COPY build.sbt .
 COPY modules modules
 
-# Links the Scala.js client, copies the bundle into the server's resources,
-# then packages the server jar and its full runtime classpath as plain jars
-# (no sbt-assembly/native-packager: neither is published for sbt 2.x yet).
-RUN sbt server/copyClientAssets server/Compile/packageBin server/copyRuntimeDeps
+# packageBin pulls in the Scala.js client build automatically (it's wired into
+# Compile/resourceGenerators), so this one task links the client, bundles it
+# into the jar's resources, and packages the server jar. copyRuntimeDeps then
+# copies the runtime classpath as plain jars (no sbt-assembly/native-packager:
+# neither is published for sbt 2.x yet).
+RUN sbt server/Compile/packageBin server/copyRuntimeDeps
 
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app

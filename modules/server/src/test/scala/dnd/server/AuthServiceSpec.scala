@@ -7,32 +7,18 @@ import zio.test.*
 
 object AuthServiceSpec extends ZIOSpecDefault:
   def spec = suite("AuthService")(
-    test("register then login succeeds with the correct password") {
+    test("completeDiscordLogin creates a new user on first login") {
       for
         auth   <- ZIO.service[AuthService]
-        _      <- auth.register("carol", "supersecret")
-        result <- auth.login("carol", "supersecret")
+        result <- auth.completeDiscordLogin("discord-1", "carol")
       yield assertTrue(result._1.username == "carol")
     },
-    test("login fails with the wrong password") {
+    test("completeDiscordLogin with the same discordId reuses the account and updates the username") {
       for
         auth   <- ZIO.service[AuthService]
-        _      <- auth.register("dave", "correctpw1")
-        result <- auth.login("dave", "wrongpw12").either
-      yield assertTrue(result match
-        case Left(_: ApiError.Unauthorized) => true
-        case _                              => false
-      )
-    },
-    test("registering a duplicate username fails with Conflict") {
-      for
-        auth   <- ZIO.service[AuthService]
-        _      <- auth.register("erin", "password1")
-        result <- auth.register("erin", "password2").either
-      yield assertTrue(result match
-        case Left(_: ApiError.Conflict) => true
-        case _                          => false
-      )
+        first  <- auth.completeDiscordLogin("discord-2", "dave")
+        second <- auth.completeDiscordLogin("discord-2", "dave-renamed")
+      yield assertTrue(second._1.id == first._1.id, second._1.username == "dave-renamed")
     },
     test("resolveSession returns Unauthorized for a missing cookie") {
       for

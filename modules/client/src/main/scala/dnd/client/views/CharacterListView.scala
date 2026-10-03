@@ -21,7 +21,7 @@ object CharacterListView:
     def createCharacter(): Unit =
       AppRuntime.run(Api.createCharacter())(
         onSuccess = {
-          case Right(character) => AppState.page.set(Page.CharacterEditor(character.id.value))
+          case Right(character) => AppState.page.set(Page.CharacterEditor(character.id))
           case Left(err)        => AppState.showError(err.message)
         },
         onFailure = t => AppState.showError(t.getMessage)
@@ -64,8 +64,8 @@ object CharacterListView:
             cls := "character-row",
             span(cls := "name", if c.name.trim.isEmpty then "(namnlös)" else c.name),
             span(cls := "meta", s"${c.species} ${c.profession}".trim),
-            button(tpe := "button", "Öppna", onClick --> (_ => AppState.page.set(Page.CharacterEditor(c.id.value)))),
-            button(tpe := "button", "Ta bort", onClick --> (_ => deleteCharacter(c.id.value)))
+            button(tpe := "button", "Öppna", onClick --> (_ => AppState.page.set(Page.CharacterEditor(c.id)))),
+            button(tpe := "button", "Ta bort", onClick --> (_ => deleteCharacter(c.id)))
           )
         })
       )

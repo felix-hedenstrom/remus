@@ -1,6 +1,7 @@
 package dnd.server
 
 import dnd.shared.Endpoints
+import sttp.model.StatusCode
 import sttp.model.headers.CookieValueWithMeta
 import sttp.tapir.files.*
 import sttp.tapir.ztapir.*
@@ -34,17 +35,23 @@ object HttpApi:
       FilesOptions.default[Task].defaultFile(List("index.html"))
     )
 
-  def endpoints(auth: AuthService, characters: CharacterService): List[ZServerEndpoint[Any, Any]] =
+  def endpoints(
+    auth: AuthService,
+    discord: DiscordOAuthService,
+    characters: CharacterService
+  ): List[ZServerEndpoint[Any, Any]] =
     List(
-      Endpoints.register.zServerLogic(req => auth.register(req.username, req.password)),
-      Endpoints.login.zServerLogic { req =>
-        auth.login(req.username, req.password).map { case (user, token, expiresAt) =>
-          (user, sessionCookie(token, expiresAt))
-        }
+      Endpoints.discordLogin.zServerLogic(_ => discord.beginLogin().map(url => (StatusCode.Found, url))),
+      Endpoints.discordCallback.zServerLogic { case (code, state, error) =>
+        discord
+          .completeLogin(code, state, error)
+          .map { case (_, token, expiresAt) => (StatusCode.Found, "/", sessionCookie(token, expiresAt)) }
+          .catchAll(_ => ZIO.succeed((StatusCode.Found, "/?login_error=1", clearedCookie)))
       },
       Endpoints.logout.zServerLogic { tokenOpt =>
         ZIO.foreachDiscard(tokenOpt)(auth.logout).as(clearedCookie)
       },
+      Endpoints.me.zServerSecurityLogic(auth.resolveSession).serverLogic(user => _ => ZIO.succeed(user)),
       Endpoints.listCharacters
         .zServerSecurityLogic(auth.resolveSession)
         .serverLogic(user => _ => characters.list(user.id)),

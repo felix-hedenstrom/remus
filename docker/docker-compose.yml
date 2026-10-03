@@ -5,6 +5,11 @@ services:
       dockerfile: docker/Dockerfile
     ports:
       - "8080:8080"
+      - "127.0.0.1:8081:8081"
+    environment:
+      - DISCORD_CLIENT_ID
+      - DISCORD_CLIENT_SECRET
+      - DISCORD_REDIRECT_URI
     volumes:
       - pellegrino-data:/data
     restart: unless-stopped

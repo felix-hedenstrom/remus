@@ -10,12 +10,12 @@ import dnd.shared.{Attribute, Skill}
 object Labels:
 
   def attribute(a: Attribute): String = a match
-    case Attribute.STR => "STY"
-    case Attribute.CON => "FYS"
-    case Attribute.AGL => "SMI"
-    case Attribute.INT => "INT"
-    case Attribute.WIL => "PSY"
-    case Attribute.CHA => "KAR"
+    case Attribute.Strength => "STY"
+    case Attribute.Constitution => "FYS"
+    case Attribute.Agility => "SMI"
+    case Attribute.Intelligence => "INT"
+    case Attribute.Will => "PSY"
+    case Attribute.Charisma => "KAR"
 
   def skill(s: Skill): String = s match
     case Skill.Acrobatics        => "Hoppa & klättra"

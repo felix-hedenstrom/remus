@@ -11,10 +11,10 @@ object CharacterServiceSpec extends ZIOSpecDefault:
       for
         users   <- ZIO.service[UserRepo]
         svc     <- ZIO.service[CharacterService]
-        owner   <- users.create("owner1", "h")
-        other   <- users.create("other1", "h")
+        owner   <- users.findOrCreateByDiscordId("discord-owner1", "owner1")
+        other   <- users.findOrCreateByDiscordId("discord-other1", "other1")
         created <- svc.create(owner.id)
-        result  <- svc.get(other.id, created.id.value).either
+        result  <- svc.get(other.id, created.id).either
       yield assertTrue(result match
         case Left(_: ApiError.Forbidden) => true
         case _                           => false
@@ -24,7 +24,7 @@ object CharacterServiceSpec extends ZIOSpecDefault:
       for
         users  <- ZIO.service[UserRepo]
         svc    <- ZIO.service[CharacterService]
-        user   <- users.create("owner2", "h")
+        user   <- users.findOrCreateByDiscordId("discord-owner2", "owner2")
         result <- svc.get(user.id, 999999L).either
       yield assertTrue(result match
         case Left(_: ApiError.NotFound) => true
@@ -35,12 +35,12 @@ object CharacterServiceSpec extends ZIOSpecDefault:
       for
         users     <- ZIO.service[UserRepo]
         svc       <- ZIO.service[CharacterService]
-        user      <- users.create("owner3", "h")
+        user      <- users.findOrCreateByDiscordId("discord-owner3", "owner3")
         created   <- svc.create(user.id)
-        updated   <- svc.update(user.id, created.id.value, created.sheet.copy(header = created.sheet.header.copy(name = "Barry")))
+        updated   <- svc.update(user.id, created.id, created.sheet.copy(header = created.sheet.header.copy(name = "Barry")))
         listed    <- svc.list(user.id)
-        _         <- svc.delete(user.id, created.id.value)
-        afterDelete <- svc.get(user.id, created.id.value).either
+        _         <- svc.delete(user.id, created.id)
+        afterDelete <- svc.get(user.id, created.id).either
       yield assertTrue(
         updated.sheet.header.name == "Barry",
         listed.exists(_.id == created.id),

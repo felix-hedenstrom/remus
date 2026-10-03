@@ -3,8 +3,17 @@ package views
 
 import com.raquo.laminar.api.L.*
 import dnd.shared.*
+import io.github.iltotore.iron.*
+import io.github.iltotore.iron.autoRefine
+import io.github.iltotore.iron.constraint.all.*
 
 object CharacterEditorView:
+
+  private def parseNonNegative(v: String): NonNegativeInt =
+    v.toIntOption.getOrElse(0).max(0).refineUnsafe[GreaterEqual[0]]
+
+  private def parseAttributeValue(v: String): AttributeValue =
+    v.toIntOption.getOrElse(0).max(0).min(20).refineUnsafe[Interval.Closed[0, 20]]
 
   def apply(id: Long): Element =
     val sheetVar: Var[Option[CharacterSheet]] = Var(None)
@@ -51,14 +60,14 @@ object CharacterEditorView:
         )
       )
 
-    def intField(labelText: String, get: CharacterSheet => Int, set: (CharacterSheet, Int) => CharacterSheet) =
+    def intField(labelText: String, get: CharacterSheet => NonNegativeInt, set: (CharacterSheet, NonNegativeInt) => CharacterSheet) =
       div(
         cls := "field field-narrow",
         label(labelText),
         input(
           typ := "number",
           value <-- sheetVar.signal.map(_.map(s => get(s).toString).getOrElse("0")),
-          onInput.mapToValue --> (v => update(s => set(s, v.toIntOption.getOrElse(0))))
+          onInput.mapToValue --> (v => update(s => set(s, parseNonNegative(v))))
         )
       )
 
@@ -82,7 +91,7 @@ object CharacterEditorView:
           cls := "attribute-value",
           value <-- sheetVar.signal.map(_.map(s => get(s.attributes).value.toString).getOrElse("0")),
           onInput.mapToValue --> (v =>
-            update(s => s.copy(attributes = set(s.attributes, get(s.attributes).copy(value = v.toIntOption.getOrElse(0)))))
+            update(s => s.copy(attributes = set(s.attributes, get(s.attributes).copy(value = parseAttributeValue(v)))))
           )
         ),
         label(
@@ -107,7 +116,7 @@ object CharacterEditorView:
           cls := "resource-value",
           value <-- sheetVar.signal.map(_.map(s => get(s.resources).current.toString).getOrElse("0")),
           onInput.mapToValue --> (v =>
-            update(s => s.copy(resources = set(s.resources, get(s.resources).copy(current = v.toIntOption.getOrElse(0)))))
+            update(s => s.copy(resources = set(s.resources, get(s.resources).copy(current = parseNonNegative(v)))))
           )
         ),
         span(" / "),
@@ -116,7 +125,7 @@ object CharacterEditorView:
           cls := "resource-value",
           value <-- sheetVar.signal.map(_.map(s => get(s.resources).max.toString).getOrElse("0")),
           onInput.mapToValue --> (v =>
-            update(s => s.copy(resources = set(s.resources, get(s.resources).copy(max = v.toIntOption.getOrElse(0)))))
+            update(s => s.copy(resources = set(s.resources, get(s.resources).copy(max = parseNonNegative(v)))))
           )
         )
       )
@@ -133,7 +142,7 @@ object CharacterEditorView:
             _.flatMap(_.skills.find(_.skill == skill)).map(_.value.toString).getOrElse("0")
           ),
           onInput.mapToValue --> { v =>
-            val newValue = v.toIntOption.getOrElse(0)
+            val newValue = parseNonNegative(v)
             update(s => s.copy(skills = s.skills.map(sv => if sv.skill == skill then sv.copy(value = newValue) else sv)))
           }
         )
@@ -184,7 +193,7 @@ object CharacterEditorView:
           typ := "number",
           value := skill.value.toString,
           onInput.mapToValue --> (v =>
-            update(s => s.copy(secondarySkills = s.secondarySkills.updated(index, s.secondarySkills(index).copy(value = v.toIntOption.getOrElse(0)))))
+            update(s => s.copy(secondarySkills = s.secondarySkills.updated(index, s.secondarySkills(index).copy(value = parseNonNegative(v)))))
           )
         ),
         button(tpe := "button", "Ta bort", onClick --> (_ => update(s => s.copy(secondarySkills = s.secondarySkills.patch(index, Nil, 1)))))
@@ -216,12 +225,12 @@ object CharacterEditorView:
             div(
               cls := "attributes-section",
               h2("Egenskaper"),
-              attributeBlock("STY", _.str, (a, v) => a.copy(str = v)),
-              attributeBlock("FYS", _.con, (a, v) => a.copy(con = v)),
-              attributeBlock("SMI", _.agl, (a, v) => a.copy(agl = v)),
-              attributeBlock("INT", _.int, (a, v) => a.copy(int = v)),
-              attributeBlock("PSY", _.wil, (a, v) => a.copy(wil = v)),
-              attributeBlock("KAR", _.cha, (a, v) => a.copy(cha = v))
+              attributeBlock("STY", _.strength, (a, v) => a.copy(strength = v)),
+              attributeBlock("FYS", _.constitution, (a, v) => a.copy(constitution = v)),
+              attributeBlock("SMI", _.agility, (a, v) => a.copy(agility = v)),
+              attributeBlock("INT", _.intelligence, (a, v) => a.copy(intelligence = v)),
+              attributeBlock("PSY", _.will, (a, v) => a.copy(will = v)),
+              attributeBlock("KAR", _.charisma, (a, v) => a.copy(charisma = v))
             ),
             div(
               cls := "combat-section",

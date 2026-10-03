@@ -5,34 +5,29 @@ import doobie.implicits.*
 import zio.*
 import zio.interop.catz.*
 
-final case class UserRow(id: Long, username: String, passwordHash: String)
+final case class UserRow(id: Long, username: String, discordId: String)
 
 trait UserRepo:
-  def create(username: String, passwordHash: String): Task[UserRow]
-  def findByUsername(username: String): Task[Option[UserRow]]
+  def findOrCreateByDiscordId(discordId: String, username: String): Task[UserRow]
   def findById(id: Long): Task[Option[UserRow]]
 
 final class DoobieUserRepo(xa: Transactor[Task]) extends UserRepo:
 
-  def create(username: String, passwordHash: String): Task[UserRow] =
-    sql"INSERT INTO users(username, password_hash) VALUES ($username, $passwordHash)".update
-      .withUniqueGeneratedKeys[Long]("id")
-      .transact(xa)
-      .map(UserRow(_, username, passwordHash))
-
-  def findByUsername(username: String): Task[Option[UserRow]] =
-    sql"SELECT id, username, password_hash FROM users WHERE username = $username"
+  def findOrCreateByDiscordId(discordId: String, username: String): Task[UserRow] =
+    sql"""INSERT INTO users(username, discord_id) VALUES ($username, $discordId)
+          ON CONFLICT(discord_id) DO UPDATE SET username = excluded.username
+          RETURNING id, username, discord_id"""
       .query[(Long, String, String)]
-      .option
+      .unique
       .transact(xa)
-      .map(_.map { case (id, u, p) => UserRow(id, u, p) })
+      .map { case (id, u, d) => UserRow(id, u, d) }
 
   def findById(id: Long): Task[Option[UserRow]] =
-    sql"SELECT id, username, password_hash FROM users WHERE id = $id"
+    sql"SELECT id, username, discord_id FROM users WHERE id = $id"
       .query[(Long, String, String)]
       .option
       .transact(xa)
-      .map(_.map { case (i, u, p) => UserRow(i, u, p) })
+      .map(_.map { case (i, u, d) => UserRow(i, u, d) })
 
 object UserRepo:
   val layer: URLayer[Transactor[Task], UserRepo] = ZLayer.fromFunction(DoobieUserRepo(_))

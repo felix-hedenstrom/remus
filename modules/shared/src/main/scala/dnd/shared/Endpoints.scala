@@ -4,11 +4,10 @@ import sttp.model.StatusCode
 import sttp.model.headers.CookieValueWithMeta
 import sttp.tapir.*
 import sttp.tapir.json.circe.*
-import Json.given
 
 object Endpoints:
 
-  private val errorOutput: EndpointOutput[ApiError] =
+  val errorOutput: EndpointOutput[ApiError] =
     oneOf[ApiError](
       oneOfVariant(StatusCode.NotFound, jsonBody[ApiError.NotFound]),
       oneOfVariant(StatusCode.Forbidden, jsonBody[ApiError.Forbidden]),
@@ -19,14 +18,18 @@ object Endpoints:
 
   private val base = endpoint.errorOut(errorOutput)
 
-  val register: PublicEndpoint[RegisterRequest, ApiError, UserInfo, Any] =
-    base.post.in("api" / "auth" / "register").in(jsonBody[RegisterRequest]).out(jsonBody[UserInfo])
+  val discordLogin: PublicEndpoint[Unit, ApiError, (StatusCode, String), Any] =
+    base.get.in("api" / "auth" / "discord" / "login").out(statusCode).out(header[String]("Location"))
 
-  val login: PublicEndpoint[LoginRequest, ApiError, (UserInfo, CookieValueWithMeta), Any] =
-    base.post
-      .in("api" / "auth" / "login")
-      .in(jsonBody[LoginRequest])
-      .out(jsonBody[UserInfo])
+  val discordCallback
+      : PublicEndpoint[(Option[String], Option[String], Option[String]), ApiError, (StatusCode, String, CookieValueWithMeta), Any] =
+    base.get
+      .in("api" / "auth" / "discord" / "callback")
+      .in(query[Option[String]]("code"))
+      .in(query[Option[String]]("state"))
+      .in(query[Option[String]]("error"))
+      .out(statusCode)
+      .out(header[String]("Location"))
       .out(setCookie("session"))
 
   val logout: PublicEndpoint[Option[String], ApiError, CookieValueWithMeta, Any] =
@@ -37,6 +40,9 @@ object Endpoints:
     * regular server logic runs.
     */
   private val secured = endpoint.securityIn(cookie[Option[String]]("session")).errorOut(errorOutput)
+
+  val me: Endpoint[Option[String], Unit, ApiError, UserInfo, Any] =
+    secured.get.in("api" / "auth" / "me").out(jsonBody[UserInfo])
 
   val listCharacters: Endpoint[Option[String], Unit, ApiError, List[CharacterSummary], Any] =
     secured.get.in("api" / "characters").out(jsonBody[List[CharacterSummary]])
@@ -57,4 +63,14 @@ object Endpoints:
     secured.delete.in("api" / "characters" / path[Long]("id"))
 
   val all: List[AnyEndpoint] =
-    List(register, login, logout, listCharacters, createCharacter, getCharacter, updateCharacter, deleteCharacter)
+    List(
+      discordLogin,
+      discordCallback,
+      logout,
+      me,
+      listCharacters,
+      createCharacter,
+      getCharacter,
+      updateCharacter,
+      deleteCharacter
+    )

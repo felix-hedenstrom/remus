@@ -9,7 +9,7 @@ object CharacterRepoSpec extends ZIOSpecDefault:
       for
         repo    <- ZIO.service[CharacterRepo]
         users   <- ZIO.service[UserRepo]
-        user    <- users.create("alice", "hash")
+        user    <- users.findOrCreateByDiscordId("discord-alice", "alice")
         created <- repo.create(user.id, "Barry", "Halvling", "Magiker", """{"a":1}""")
         found   <- repo.find(created.id)
         _       <- repo.update(created.id, "Barry Gronbark", "Halvling", "Magiker", """{"a":2}""")
