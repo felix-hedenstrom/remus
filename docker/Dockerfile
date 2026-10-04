@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM sbtscala/scala-sbt:eclipse-temurin-jammy-21.0.4_7_1.10.1_3.5.1 AS build
+FROM sbtscala/scala-sbt:eclipse-temurin-21_2.x AS build
 WORKDIR /build
 
 COPY project project
