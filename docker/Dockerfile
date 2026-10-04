@@ -21,8 +21,8 @@ COPY --from=build /build/target/out/jvm/scala-*/server/server_*.jar app.jar
 COPY --from=build /build/target/out/jvm/scala-*/server/docker-libs/ lib/
 
 ENV PORT=8080
-ENV DB_PATH=/data/pellegrino.db
+ENV DB_PATH=/data/remus.db
 VOLUME ["/data"]
 EXPOSE 8080
 
-CMD ["sh", "-c", "java -cp app.jar:lib/* dnd.server.Main"]
+CMD ["sh", "-c", "java -cp app.jar:lib/* nu.fxh.remus.server.Main"]

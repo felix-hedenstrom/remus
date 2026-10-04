@@ -11,7 +11,7 @@ val zioConfigVersion   = "4.1.0"
 val ironVersion        = "3.0.3"
 
 ThisBuild / scalaVersion := scala3Version
-ThisBuild / organization := "nu.fxh.pelle"
+ThisBuild / organization := "nu.fxh.remus"
 ThisBuild / version      := "0.1.0-SNAPSHOT"
 ThisBuild / scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
 
@@ -118,9 +118,9 @@ lazy val client = (project in file("modules/client"))
 lazy val root = (project in file("."))
   .aggregate(sharedJVM, sharedJS, server, devtools, client)
   .settings(
-    name := "pellegrino-simulator",
+    name := "remus",
     publish / skip := true,
     Compile / run := (server / Compile / run).evaluated
   )
 
-addCommandAlias("devRun", "devtools/runMain dnd.devtools.DevMain")
+addCommandAlias("devRun", "devtools/runMain nu.fxh.remus.devtools.DevMain")

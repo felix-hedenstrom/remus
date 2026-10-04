@@ -1,10 +1,12 @@
-# Pellegrino Simulator
+# Remus
 
 A self-hostable character sheet manager for the Drakar och Demoner tabletop
 RPG (the modern Riotminds edition, published in English as *Dragonbane*).
 Each player registers an account and manages their own character sheets —
 attributes, skills, weapons, inventory, resources — through a web UI that
 mirrors the physical sheet.
+
+A hosted instance runs at [remus.fxh.nu](https://remus.fxh.nu).
 
 This is a fan-made, unofficial tool. It is not affiliated with or endorsed by
 Riotminds or Free League.
@@ -37,7 +39,7 @@ machine but not the network.
 
 Configuration lives in `modules/server/src/main/resources/application.conf`
 (loaded via zio-config), with environment variables overriding the defaults:
-`PORT` (8080), `ADMIN_PORT` (8081), `DB_PATH` (`./data/pellegrino.db`).
+`PORT` (8080), `ADMIN_PORT` (8081), `DB_PATH` (`./data/remus.db`).
 
 Authentication is "Login with Discord" — there's no username/password. You
 need a Discord application (create one at the
