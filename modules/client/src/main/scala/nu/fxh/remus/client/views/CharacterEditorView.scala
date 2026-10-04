@@ -41,8 +41,8 @@ object CharacterEditorView:
     val loaded: Var[Boolean] = Var(false)
 
     // Populated once, when the form below is built (see `loaded` usage at
-    // the bottom of this function) by every field backed by `DraftField`.
-    val draftFields = scala.collection.mutable.ListBuffer.empty[DraftField]
+    // the bottom of this function), with every field backed by `DraftField`.
+    val draftFieldsVar: Var[List[DraftField]] = Var(Nil)
 
     def load(): Unit =
       AppRuntime.run(Api.getCharacter(id))(
@@ -57,7 +57,7 @@ object CharacterEditorView:
 
     def save(): Unit =
       sheetVar.now().foreach { sheet =>
-        val activeDrafts = draftFields.filter(_.isActive())
+        val activeDrafts = draftFieldsVar.now().filter(_.isActive())
         val blankLabels   = activeDrafts.filter(_.draft.now().trim.isEmpty).map(_.label)
         if blankLabels.nonEmpty then
           AppState.showError(s"${blankLabels.mkString(", ")} får inte vara tomt.")
@@ -94,10 +94,9 @@ object CharacterEditorView:
         )
       )
 
-    def nonEmptyTextField(labelText: String, get: CharacterSheet => NonEmptyString, set: (CharacterSheet, NonEmptyString) => CharacterSheet) =
+    def nonEmptyTextField(labelText: String, get: CharacterSheet => NonEmptyString, set: (CharacterSheet, NonEmptyString) => CharacterSheet): (Element, DraftField) =
       val draft: Var[String] = Var(sheetVar.now().map(get).map(_.toString).getOrElse(""))
-      draftFields += DraftField(labelText, draft, () => true, set)
-      div(
+      val element = div(
         cls := "field",
         label(labelText),
         input(
@@ -106,11 +105,11 @@ object CharacterEditorView:
           onInput.mapToValue --> { v => draft.set(v); savedJustNow.set(false) }
         )
       )
+      (element, DraftField(labelText, draft, () => true, set))
 
-    def nonEmptyTextAreaField(labelText: String, get: CharacterSheet => NonEmptyString, set: (CharacterSheet, NonEmptyString) => CharacterSheet) =
+    def nonEmptyTextAreaField(labelText: String, get: CharacterSheet => NonEmptyString, set: (CharacterSheet, NonEmptyString) => CharacterSheet): (Element, DraftField) =
       val draft: Var[String] = Var(sheetVar.now().map(get).map(_.toString).getOrElse(""))
-      draftFields += DraftField(labelText, draft, () => true, set)
-      div(
+      val element = div(
         cls := "field field-textarea",
         label(labelText),
         textArea(
@@ -118,6 +117,7 @@ object CharacterEditorView:
           onInput.mapToValue --> { v => draft.set(v); savedJustNow.set(false) }
         )
       )
+      (element, DraftField(labelText, draft, () => true, set))
 
     // The hidden file input is read via `ev.target`, not a self-reference to
     // `fileInput`, to sidestep the forward-reference restriction on local
@@ -130,9 +130,8 @@ object CharacterEditorView:
     // never happens synchronously inside the user's click gesture. The raw
     // file bytes are sent to the server as-is; the server downscales and
     // recompresses using its own (non-browser) image libraries instead.
-    def nameTitleAndPortrait() =
+    def nameTitleAndPortrait(): (Element, DraftField) =
       val nameDraft: Var[String] = Var(sheetVar.now().map(_.header.name).map(_.toString).getOrElse(""))
-      draftFields += DraftField("Namn", nameDraft, () => true, (s, v) => s.copy(header = s.header.copy(name = v)))
       val fileInput = input(
         typ := "file",
         cls := "portrait-file-input",
@@ -154,7 +153,7 @@ object CharacterEditorView:
             target.value = ""
         }
       )
-      div(
+      val element = div(
         cls := "header-top",
         div(
           cls := "portrait-box",
@@ -173,10 +172,11 @@ object CharacterEditorView:
           onInput.mapToValue --> { v => nameDraft.set(v); savedJustNow.set(false) }
         )
       )
+      (element, DraftField("Namn", nameDraft, () => true, (s, v) => s.copy(header = s.header.copy(name = v))))
 
     val customMarker = "__custom__"
 
-    def speciesField(labelText: String) =
+    def speciesField(labelText: String): (Element, DraftField) =
       // The custom-name input is created once (not inside a signal-driven
       // child block) so typing into it doesn't tear down and rebuild the
       // element - and lose focus - on every keystroke.
@@ -184,19 +184,13 @@ object CharacterEditorView:
         case Species.Custom(name) => Some(name.toString)
         case _                     => None
       }).getOrElse(""))
-      draftFields += DraftField(
-        labelText,
-        customDraft,
-        () => sheetVar.now().exists(_.header.species.isInstanceOf[Species.Custom]),
-        (s, v) => s.copy(header = s.header.copy(species = Species.Custom(v)))
-      )
       val customInput = input(
         typ := "text",
         placeholder := "Släkte",
         value <-- customDraft.signal,
         onInput.mapToValue --> { v => customDraft.set(v); savedJustNow.set(false) }
       )
-      div(
+      val element = div(
         cls := "field field-select-custom",
         label(labelText),
         select(
@@ -222,25 +216,26 @@ object CharacterEditorView:
           if _ then customInput else emptyNode
         }
       )
+      val draftField = DraftField(
+        labelText,
+        customDraft,
+        () => sheetVar.now().exists(_.header.species.isInstanceOf[Species.Custom]),
+        (s, v) => s.copy(header = s.header.copy(species = Species.Custom(v)))
+      )
+      (element, draftField)
 
-    def professionField(labelText: String) =
+    def professionField(labelText: String): (Element, DraftField) =
       val customDraft: Var[String] = Var(sheetVar.now().flatMap(_.header.profession match {
         case Profession.Custom(name) => Some(name.toString)
         case _                        => None
       }).getOrElse(""))
-      draftFields += DraftField(
-        labelText,
-        customDraft,
-        () => sheetVar.now().exists(_.header.profession.isInstanceOf[Profession.Custom]),
-        (s, v) => s.copy(header = s.header.copy(profession = Profession.Custom(v)))
-      )
       val customInput = input(
         typ := "text",
         placeholder := "Yrke",
         value <-- customDraft.signal,
         onInput.mapToValue --> { v => customDraft.set(v); savedJustNow.set(false) }
       )
-      div(
+      val element = div(
         cls := "field field-select-custom",
         label(labelText),
         select(
@@ -263,6 +258,13 @@ object CharacterEditorView:
           if _ then customInput else emptyNode
         }
       )
+      val draftField = DraftField(
+        labelText,
+        customDraft,
+        () => sheetVar.now().exists(_.header.profession.isInstanceOf[Profession.Custom]),
+        (s, v) => s.copy(header = s.header.copy(profession = Profession.Custom(v)))
+      )
+      (element, draftField)
 
     def damageBonusField(labelText: String, get: CharacterSheet => DamageBonus, set: (CharacterSheet, DamageBonus) => CharacterSheet) =
       div(
@@ -683,21 +685,29 @@ object CharacterEditorView:
       child <-- loaded.signal.map {
         case false => div("Laddar...")
         case true =>
+          val (nameEl, nameDraftField)             = nameTitleAndPortrait()
+          val (speciesEl, speciesDraftField)       = speciesField("Släkte")
+          val (professionEl, professionDraftField) = professionField("Yrke")
+          val (weaknessEl, weaknessDraftField) =
+            nonEmptyTextAreaField("Svaghet", _.header.weakness, (s, v) => s.copy(header = s.header.copy(weakness = v)))
+          val (appearanceEl, appearanceDraftField) =
+            nonEmptyTextAreaField("Utseende", _.header.appearance, (s, v) => s.copy(header = s.header.copy(appearance = v)))
+          draftFieldsVar.set(List(nameDraftField, speciesDraftField, professionDraftField, weaknessDraftField, appearanceDraftField))
           div(
             cls := "sheet-grid",
             div(
               cls := "top-row full-width",
               div(
                 cls := "header-section",
-                nameTitleAndPortrait(),
+                nameEl,
                 div(
                   cls := "header-compact-row",
-                  speciesField("Släkte"),
+                  speciesEl,
                   ageCategoryField("Ålder"),
-                  professionField("Yrke")
+                  professionEl
                 ),
-                nonEmptyTextAreaField("Svaghet", _.header.weakness, (s, v) => s.copy(header = s.header.copy(weakness = v))),
-                nonEmptyTextAreaField("Utseende", _.header.appearance, (s, v) => s.copy(header = s.header.copy(appearance = v)))
+                weaknessEl,
+                appearanceEl
               ),
               div(
                 cls := "weapons-section",
