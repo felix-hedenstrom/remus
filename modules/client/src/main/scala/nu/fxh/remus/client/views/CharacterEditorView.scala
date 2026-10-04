@@ -168,10 +168,10 @@ object CharacterEditorView:
         select(
           value <-- sheetVar.signal.map(_.map(_.header.species).collect { case Species.Custom(_) => customMarker }.getOrElse(Species.Human.label)),
           onChange.mapToValue --> { v =>
-            val newSpecies = if v == customMarker then Species.Custom("Annat".refineUnsafe[Not[Blank]]) else Species.Human
+            val newSpecies = Species.known.find(_.label == v).getOrElse(Species.Custom("Annat".refineUnsafe[Not[Blank]]))
             update(s => s.copy(header = s.header.copy(species = newSpecies)))
           },
-          option(value := Species.Human.label, Labels.species(Species.Human)),
+          Species.known.map(sp => option(value := sp.label, Labels.species(sp))),
           option(value := customMarker, "Annat...")
         ),
         child <-- sheetVar.signal.map(_.exists(_.header.species.isInstanceOf[Species.Custom])).map {
@@ -192,12 +192,12 @@ object CharacterEditorView:
         cls := "field field-select-custom",
         label(labelText),
         select(
-          value <-- sheetVar.signal.map(_.map(_.header.profession).collect { case Profession.Custom(_) => customMarker }.getOrElse(Profession.Warrior.label)),
+          value <-- sheetVar.signal.map(_.map(_.header.profession).collect { case Profession.Custom(_) => customMarker }.getOrElse(Profession.Fighter.label)),
           onChange.mapToValue --> { v =>
-            val newProfession = if v == customMarker then Profession.Custom("Annat".refineUnsafe[Not[Blank]]) else Profession.Warrior
+            val newProfession = Profession.known.find(_.label == v).getOrElse(Profession.Custom("Annat".refineUnsafe[Not[Blank]]))
             update(s => s.copy(header = s.header.copy(profession = newProfession)))
           },
-          option(value := Profession.Warrior.label, Labels.profession(Profession.Warrior)),
+          Profession.known.map(p => option(value := p.label, Labels.profession(p))),
           option(value := customMarker, "Annat...")
         ),
         child <-- sheetVar.signal.map(_.exists(_.header.profession.isInstanceOf[Profession.Custom])).map {

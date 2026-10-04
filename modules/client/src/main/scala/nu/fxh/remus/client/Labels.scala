@@ -9,14 +9,28 @@ import nu.fxh.remus.shared.{AgeCategory, Attribute, DamageBonus, Grip, Professio
   */
 object Labels:
 
-  // Species/Profession only have their first real case plus a Custom(name)
-  // escape hatch so far - extend these matches as more official options are added.
   def species(s: Species): String = s match
     case Species.Human        => "Människa"
+    case Species.Dwarf        => "Dvärg"
+    case Species.Elf          => "Alv"
+    case Species.Halfling     => "Halvling"
+    case Species.Mallard      => "Anka"
+    case Species.Wolfkin      => "Vargfolk"
+    case Species.Frogling     => "Grodfolk"
+    case Species.Satyr        => "Satyr"
     case Species.Custom(name) => name
 
   def profession(p: Profession): String = p match
-    case Profession.Warrior     => "Krigare"
+    case Profession.Artisan      => "Hantverkare"
+    case Profession.Bard         => "Bard"
+    case Profession.Fighter      => "Krigare"
+    case Profession.Hunter       => "Jägare"
+    case Profession.Knight       => "Riddare"
+    case Profession.Mage         => "Magiker"
+    case Profession.Mariner      => "Sjöfarare"
+    case Profession.Merchant     => "Köpman"
+    case Profession.Scholar      => "Lärd"
+    case Profession.Thief        => "Tjuv"
     case Profession.Custom(name) => name
 
   def ageCategory(a: AgeCategory): String = a match

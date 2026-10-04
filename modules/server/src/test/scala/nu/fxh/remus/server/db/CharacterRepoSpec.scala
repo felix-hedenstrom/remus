@@ -11,9 +11,9 @@ object CharacterRepoSpec extends ZIOSpecDefault:
         repo    <- ZIO.service[CharacterRepo]
         users   <- ZIO.service[UserRepo]
         user    <- users.findOrCreateByDiscordId("discord-alice", "alice")
-        created <- repo.create(user.id, "Barry", Species.Human, Profession.Warrior, """{"a":1}""")
+        created <- repo.create(user.id, "Barry", Species.Human, Profession.Fighter, """{"a":1}""")
         found   <- repo.find(created.id)
-        _       <- repo.update(created.id, "Barry Gronbark", Species.Human, Profession.Warrior, """{"a":2}""")
+        _       <- repo.update(created.id, "Barry Gronbark", Species.Human, Profession.Fighter, """{"a":2}""")
         updated <- repo.find(created.id)
         listed  <- repo.listByOwner(user.id)
         _       <- repo.delete(created.id)

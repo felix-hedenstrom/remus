@@ -13,4 +13,4 @@ final case class CharacterHeader(
                                 ) derives Codec, Schema
 
 object CharacterHeader:
-  val default: CharacterHeader = CharacterHeader("<name>", Species.Human, AgeCategory.Adult, Profession.Warrior, "<weakness>", "<appearance>", None)
+  val default: CharacterHeader = CharacterHeader("<name>", Species.Human, AgeCategory.Adult, Profession.Fighter, "<weakness>", "<appearance>", None)
