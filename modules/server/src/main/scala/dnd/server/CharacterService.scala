@@ -50,9 +50,30 @@ final class CharacterServiceLive(repo: CharacterRepo) extends CharacterService:
 
   def update(ownerId: Long, id: Long, sheet: CharacterSheet): IO[ApiError, Character] =
     for
-      _ <- requireOwned(ownerId, id)
-      _ <- repo.update(id, sheet.header.name, sheet.header.species, sheet.header.profession, sheet.asJson.noSpaces).orDie
-    yield Character(id.refineUnsafe[Positive], sheet)
+      row            <- requireOwned(ownerId, id)
+      current        <- parseSheet(row)
+      processedSheet <- resolvePortrait(current, sheet)
+      _ <- repo
+             .update(id, processedSheet.header.name, processedSheet.header.species, processedSheet.header.profession, processedSheet.asJson.noSpaces)
+             .orDie
+    yield Character(id.refineUnsafe[Positive], processedSheet)
+
+  // Only reprocesses the portrait when it actually changed, so repeated
+  // saves of an untouched portrait don't re-encode the JPEG every time
+  // (each re-encode is a fresh generation-loss pass).
+  private def resolvePortrait(current: CharacterSheet, incoming: CharacterSheet): IO[ApiError, CharacterSheet] =
+    if incoming.header.portrait == current.header.portrait then ZIO.succeed(incoming)
+    else
+      incoming.header.portrait match
+        case None => ZIO.succeed(incoming)
+        case Some(dataUrl) =>
+          ZIO
+            .attemptBlocking(PortraitProcessor.process(dataUrl))
+            .orDie
+            .flatMap {
+              case Right(processed) => ZIO.succeed(incoming.copy(header = incoming.header.copy(portrait = Some(processed))))
+              case Left(reason)     => ZIO.fail(ApiError.ValidationError(s"Kunde inte bearbeta bilden: $reason"))
+            }
 
   def delete(ownerId: Long, id: Long): IO[ApiError, Unit] =
     requireOwned(ownerId, id).flatMap(row => repo.delete(row.id).orDie)

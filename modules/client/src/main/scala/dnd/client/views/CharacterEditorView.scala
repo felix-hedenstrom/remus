@@ -10,6 +10,8 @@ import org.scalajs.dom
 
 object CharacterEditorView:
 
+  private val PortraitMaxBytes = 15L * 1024 * 1024
+
   private def parseNonNegative(v: String): NonNegativeInt =
     v.toIntOption.getOrElse(0).max(0).refineUnsafe[GreaterEqual[0]]
 
@@ -93,39 +95,17 @@ object CharacterEditorView:
         )
       )
 
-    def canvasSized(w: Int, h: Int): dom.html.Canvas =
-      val c = dom.document.createElement("canvas").asInstanceOf[dom.html.Canvas]
-      c.width = w
-      c.height = h
-      c
-
-    // Target sizes for each downscale step, largest first, ending in
-    // (targetW, targetH). Halving repeatedly (instead of one drawImage
-    // straight from full resolution down to the target) avoids the visible
-    // banding/moire artifacts Firefox's canvas resampler produces on a
-    // large single-step downscale - Chrome tolerates the single step fine,
-    // which is why this only showed up in Firefox.
-    def downscaleSteps(w0: Int, h0: Int, targetW: Int, targetH: Int): List[(Int, Int)] =
-      if w0 <= targetW * 2 && h0 <= targetH * 2 then List((targetW, targetH))
-      else
-        val nextW = math.max(targetW, w0 / 2)
-        val nextH = math.max(targetH, h0 / 2)
-        (nextW, nextH) :: downscaleSteps(nextW, nextH, targetW, targetH)
-
-    def downscale(img: dom.html.Image, targetW: Int, targetH: Int): dom.html.Canvas =
-      val steps       = downscaleSteps(img.width, img.height, targetW, targetH)
-      val (w0, h0)    = steps.head
-      val firstCanvas = canvasSized(w0, h0)
-      firstCanvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D].drawImage(img, 0, 0, w0, h0)
-      steps.tail.foldLeft(firstCanvas) { case (prev, (w, h)) =>
-        val next = canvasSized(w, h)
-        next.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D].drawImage(prev, 0, 0, w, h)
-        next
-      }
-
     // The hidden file input is read via `ev.target`, not a self-reference to
     // `fileInput`, to sidestep the forward-reference restriction on local
     // vals; the visible box only ever triggers it via `.ref.click()`.
+    //
+    // Resizing is deliberately NOT done here via <canvas>: reading pixel data
+    // back out of a canvas (drawImage + toDataURL) is exactly what Firefox's
+    // privacy.resistFingerprinting (and similar protections in Brave/Tor)
+    // silently corrupts into rainbow/striped garbage, since that readback
+    // never happens synchronously inside the user's click gesture. The raw
+    // file bytes are sent to the server as-is; the server downscales and
+    // recompresses using its own (non-browser) image libraries instead.
     def nameTitleAndPortrait() =
       val fileInput = input(
         typ := "file",
@@ -137,19 +117,14 @@ object CharacterEditorView:
             files <- Option(target.files)
             if files.length > 0
           do
-            val file   = files(0)
-            val reader = new dom.FileReader
-            reader.onload = _ =>
-              val img = dom.document.createElement("img").asInstanceOf[dom.html.Image]
-              img.onload = _ =>
-                val maxDim  = 512.0
-                val scale   = math.min(1.0, maxDim / math.max(img.width, img.height))
-                val targetW = math.max(1, (img.width * scale).toInt)
-                val targetH = math.max(1, (img.height * scale).toInt)
-                val canvas  = downscale(img, targetW, targetH)
-                update(s => s.copy(header = s.header.copy(portrait = Some(canvas.toDataURL("image/jpeg", 0.85)))))
-              img.src = reader.result.asInstanceOf[String]
-            reader.readAsDataURL(file)
+            val file = files(0)
+            if file.size > PortraitMaxBytes then
+              AppState.showError("Bilden är för stor (max 15 MB).")
+            else
+              val reader = new dom.FileReader
+              reader.onload = _ =>
+                update(s => s.copy(header = s.header.copy(portrait = Some(reader.result.asInstanceOf[String]))))
+              reader.readAsDataURL(file)
             target.value = ""
         }
       )
