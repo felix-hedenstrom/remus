@@ -3,6 +3,7 @@ package views
 
 import com.raquo.laminar.api.L.*
 import nu.fxh.remus.shared.CharacterSummary
+import org.scalajs.dom
 
 object CharacterListView:
 
@@ -68,7 +69,12 @@ object CharacterListView:
               if c.name.trim.isEmpty then "(namnlös)" else c.name
             ),
             span(cls := "meta", s"${Labels.species(c.species)} ${Labels.profession(c.profession)}".trim),
-            button(tpe := "button", cls := "danger", "Ta bort", onClick --> (_ => deleteCharacter(c.id)))
+            button(
+              tpe := "button",
+              cls := "danger",
+              "Ta bort",
+              onClick --> (_ => if dom.window.confirm("Är du säker på att du vill ta bort karaktären?") then deleteCharacter(c.id))
+            )
           )
         })
       )

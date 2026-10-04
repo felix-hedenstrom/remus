@@ -1,7 +1,6 @@
 package nu.fxh.remus.server
 
 import nu.fxh.remus.server.db.*
-import doobie.Transactor
 import sttp.client4.Backend
 import sttp.client4.httpclient.zio.HttpClientZioBackend
 import sttp.tapir.server.ziohttp.ZioHttpInterpreter
@@ -26,15 +25,15 @@ object AppRuntime:
       ()
     }
 
+  private val maxRequestBodySize = 20 * 1024 * 1024 // 20 MB, to allow for character portrait uploads
+
   private def serveOn(routes: Routes[Any, Response], onPort: Int): Task[Nothing] =
-    Server.serve(routes).provide(Server.defaultWithPort(onPort))
+    Server.serve(routes).provide(Server.defaultWith(_.port(onPort).disableRequestStreaming(maxRequestBodySize)))
 
   private val program =
     for
       config <- ZIO.service[AppConfig]
       _ <- ensureParentDir(config.dbPath)
-      xa <- ZIO.service[Transactor[Task]]
-      _ <- Migrations.run(xa)
       auth <- ZIO.service[AuthService]
       discord <- ZIO.service[DiscordOAuthService]
       chars <- ZIO.service[CharacterService]

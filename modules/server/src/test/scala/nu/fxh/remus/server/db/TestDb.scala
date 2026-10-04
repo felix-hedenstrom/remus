@@ -20,6 +20,4 @@ object TestDb:
     }
 
   val layer: ZLayer[Any, Throwable, Transactor[Task]] =
-    tempPath
-      .flatMap(env => Db.layer(env.get[String]))
-      .tap(env => Migrations.run(env.get[Transactor[Task]]))
+    tempPath.flatMap(env => Db.layer(env.get[String]))
