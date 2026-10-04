@@ -389,6 +389,7 @@ object CharacterEditorView:
     def skillRow(skill: Skill) =
       div(
         cls := "skill-row",
+        cls("has-bane") <-- sheetVar.signal.map(_.exists(s => s.attributes.score(skill.attribute).distressed)),
         span(
           cls := "skill-mark",
           cls("marked") <-- sheetVar.signal.map(_.flatMap(_.skills.find(_.skill == skill)).exists(_.markedForAdvancement)),
@@ -533,6 +534,11 @@ object CharacterEditorView:
       def skillAt(sheetOpt: Option[CharacterSheet]): Option[SecondarySkill] = sheetOpt.flatMap(_.secondarySkills.lift(index))
       div(
         cls := "secondary-skill-row",
+        cls("has-bane") <-- sheetVar.signal.map { sheetOpt =>
+          (sheetOpt, skillAt(sheetOpt)) match
+            case (Some(sheet), Some(sk)) => sheet.attributes.score(sk.attribute).distressed
+            case _                       => false
+        },
         span(
           cls := "skill-mark",
           cls("marked") <-- sheetVar.signal.map(skillAt(_).exists(_.markedForAdvancement)),

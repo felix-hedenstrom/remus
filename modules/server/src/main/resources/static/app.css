@@ -14,6 +14,7 @@
   --ink: #2a2420;
   --blood-accent: #7a2e2e;
   --will-accent: #3f6b4f;
+  --bane-accent: #b8651f;
 
   --space-1: 0.2rem;
   --space-2: 0.4rem;
@@ -608,6 +609,21 @@ input.attribute-value {
 .skill-name { flex: 1; }
 .skill-attr { color: var(--metal-iron); opacity: 0.75; width: 3rem; font-size: 0.85rem; }
 .skill-value { width: 3rem; }
+
+/* bane warning - governing attribute is distressed */
+.skill-row.has-bane,
+.secondary-skill-row.has-bane {
+  border-left: 2px solid var(--bane-accent);
+  padding-left: 0.3rem;
+  background: rgba(184, 101, 31, 0.08);
+}
+.skill-row.has-bane .skill-name,
+.skill-row.has-bane .skill-attr,
+.secondary-skill-row.has-bane .secondary-skill-name,
+.secondary-skill-row.has-bane .secondary-skill-attr {
+  color: var(--bane-accent);
+  opacity: 1;
+}
 
 .item-row, .secondary-skill-row {
   display: flex;

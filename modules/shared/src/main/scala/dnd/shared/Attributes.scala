@@ -8,7 +8,14 @@ final case class Attributes(
     intelligence: AttributeScore,
     will: AttributeScore,
     charisma: AttributeScore
-) derives Codec, Schema
+) derives Codec, Schema:
+  def score(attribute: Attribute): AttributeScore = attribute match
+    case Attribute.Strength     => strength
+    case Attribute.Constitution => constitution
+    case Attribute.Agility      => agility
+    case Attribute.Intelligence => intelligence
+    case Attribute.Will         => will
+    case Attribute.Charisma     => charisma
 
 object Attributes:
   val default: Attributes = Attributes(
