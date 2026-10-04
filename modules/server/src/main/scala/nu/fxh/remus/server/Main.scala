@@ -25,8 +25,10 @@ object AppRuntime:
       ()
     }
 
+  private val maxRequestBodySize = 20 * 1024 * 1024 // 20 MB, to allow for character portrait uploads
+
   private def serveOn(routes: Routes[Any, Response], onPort: Int): Task[Nothing] =
-    Server.serve(routes).provide(Server.defaultWithPort(onPort))
+    Server.serve(routes).provide(Server.defaultWith(_.port(onPort).disableRequestStreaming(maxRequestBodySize)))
 
   private val program =
     for
