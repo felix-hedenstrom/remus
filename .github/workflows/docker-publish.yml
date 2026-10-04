@@ -3,6 +3,7 @@ name: Build and publish Docker image
 on:
   push:
     branches: [master]
+  pull_request: {}
   workflow_dispatch: {}
 
 jobs:
@@ -11,6 +12,12 @@ jobs:
     container: sbtscala/scala-sbt:eclipse-temurin-21_2.x
     steps:
       - uses: actions/checkout@v4
+
+      # Scala.js test execution (client module) shells out to node; the sbt
+      # container image doesn't bundle it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - uses: actions/cache@v4
         with:
@@ -27,6 +34,9 @@ jobs:
 
   build-and-push:
     needs: test
+    # Only publish on an actual push to master (or a manual dispatch) — PRs
+    # just need the test job above to run, not an image push.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
