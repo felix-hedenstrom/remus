@@ -34,8 +34,6 @@ jobs:
 
   build-and-push:
     needs: test
-    # Only publish on an actual push to master (or a manual dispatch) — PRs
-    # just need the test job above to run, not an image push.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
