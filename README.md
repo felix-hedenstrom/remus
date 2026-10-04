@@ -117,15 +117,13 @@ no campaign/GM grouping yet. The frontend is intentionally plain
 (no component framework, no client-side routing) since it's expected to be
 reshaped as it gets used at the table.
 
-## Known data-migration gap
+## Database schema and migrations
 
-`CharacterSheet` (including `Inventory`/`InventoryItem`) is persisted as one
-JSON blob in `characters.sheet_json` — there's no per-field migration path.
-Adding a required field to a nested case class (e.g. `InventoryItem.weight`,
-added for the lätt/normal/tung carry-weight feature) means any character
-saved before that field existed will fail to decode on load, since the repo
-deliberately avoids default-value/optional-field decoder workarounds to paper
-over this. This is a known gap, not an oversight — the plan is to redo the
-database layer (proper migrations/columns instead of one opaque JSON blob)
-before this becomes a real problem, rather than band-aid individual fields
-now.
+`CharacterSheet` is stored as flattened scalar columns on `characters`
+(header, attributes, combat stats, resources, currency, armor) plus six
+child tables for its lists: `character_skills`, `character_secondary_skills`,
+`character_abilities`, `character_inventory_items`, `character_weapons`, and
+`character_weapon_properties` — no JSON blob. Schema changes are real
+[Flyway](https://flywaydb.org/) migrations under
+`modules/server/src/main/resources/db/migration/V<N>__*.sql`, applied on
+boot before the connection pool is built (see `Db.scala`).

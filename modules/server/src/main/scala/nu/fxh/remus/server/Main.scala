@@ -1,7 +1,6 @@
 package nu.fxh.remus.server
 
 import nu.fxh.remus.server.db.*
-import doobie.Transactor
 import sttp.client4.Backend
 import sttp.client4.httpclient.zio.HttpClientZioBackend
 import sttp.tapir.server.ziohttp.ZioHttpInterpreter
@@ -33,8 +32,6 @@ object AppRuntime:
     for
       config <- ZIO.service[AppConfig]
       _ <- ensureParentDir(config.dbPath)
-      xa <- ZIO.service[Transactor[Task]]
-      _ <- Migrations.run(xa)
       auth <- ZIO.service[AuthService]
       discord <- ZIO.service[DiscordOAuthService]
       chars <- ZIO.service[CharacterService]

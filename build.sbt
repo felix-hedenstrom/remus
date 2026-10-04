@@ -9,6 +9,7 @@ val interopCatsVersion = "23.1.0.13"
 val laminarVersion     = "17.2.1"
 val zioConfigVersion   = "4.1.0"
 val ironVersion        = "3.0.3"
+val flywayVersion      = "13.9.0"
 
 ThisBuild / scalaVersion := scala3Version
 ThisBuild / organization := "nu.fxh.remus"
@@ -85,6 +86,7 @@ lazy val server = (project in file("modules/server"))
       "dev.zio" %% "zio-config-magnolia" % zioConfigVersion,
       "dev.zio" %% "zio-config-typesafe" % zioConfigVersion,
       "org.xerial" % "sqlite-jdbc" % "3.53.4.0",
+      "org.flywaydb" % "flyway-core" % flywayVersion, // SQLite support is bundled in core, no separate module needed
       "com.softwaremill.sttp.client4" %% "zio" % sttpVersion,
       "ch.qos.logback" % "logback-classic" % "1.6.3",
       "dev.zio" %% "zio-test"     % zioVersion % Test,
