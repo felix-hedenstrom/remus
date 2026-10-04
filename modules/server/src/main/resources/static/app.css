@@ -632,8 +632,24 @@ input.attribute-value {
   align-items: center;
 }
 
+.item-row input[type="text"] { flex: 1; min-width: 0; }
+.item-row select { flex: 0 0 auto; }
+
 .secondary-skill-name { flex: 1; min-width: 0; }
 .secondary-skill-attr { padding: 0.25rem 1.6rem 0.25rem 0.4rem; font-size: 0.78rem; }
+
+.weight-total {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--metal-iron);
+  opacity: 0.75;
+  margin: -0.15rem 0 0.3rem;
+}
+.weight-total.over-capacity {
+  color: var(--bane-accent);
+  opacity: 1;
+  font-weight: 600;
+}
 
 /* weapon table - header and rows share one column grid so labels line up */
 .weapon-row {

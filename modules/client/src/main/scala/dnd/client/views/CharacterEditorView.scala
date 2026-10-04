@@ -506,13 +506,23 @@ object CharacterEditorView:
       )
 
     def itemRow(index: Int) =
+      def itemAt(sheetOpt: Option[CharacterSheet]): Option[InventoryItem] = sheetOpt.flatMap(_.inventory.items.lift(index))
+      val weightSelect =
+        select(
+          value <-- sheetVar.signal.map(itemAt(_).map(_.weight.ordinal.toString).getOrElse(WeightCategory.Normal.ordinal.toString)),
+          onChange.mapToValue --> (v =>
+            update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items.updated(index, s.inventory.items(index).copy(weight = WeightCategory.fromOrdinal(v.toInt))))))
+          ),
+          WeightCategory.values.map(w => option(value := w.ordinal.toString, Labels.weightCategory(w)))
+        )
       div(
         cls := "item-row",
         input(
           typ := "text",
-          value <-- sheetVar.signal.map(_.flatMap(_.inventory.items.lift(index)).map(_.text).getOrElse("")),
-          onInput.mapToValue --> (v => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items.updated(index, InventoryItem(v))))))
+          value <-- sheetVar.signal.map(itemAt(_).map(_.text).getOrElse("")),
+          onInput.mapToValue --> (v => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items.updated(index, s.inventory.items(index).copy(text = v))))))
         ),
+        weightSelect,
         button(tpe := "button", cls := "remove-row", "×", onClick --> (_ => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items.patch(index, Nil, 1))))))
       )
 
@@ -735,6 +745,11 @@ object CharacterEditorView:
                 cls := "inventory-section",
                 sectionHeader("Packning", "icon-backpack"),
                 intField("Bärförmåga", _.inventory.carryCapacity, (s, v) => s.copy(inventory = s.inventory.copy(carryCapacity = v))),
+                span(
+                  cls := "weight-total",
+                  cls("over-capacity") <-- sheetVar.signal.map(_.exists(s => s.inventory.totalWeight > s.inventory.carryCapacity.toInt.toDouble)),
+                  child.text <-- sheetVar.signal.map(_.map(s => f"Vikt: ${s.inventory.totalWeight}%.1f / ${s.inventory.carryCapacity.toInt}").getOrElse(""))
+                ),
                 div(
                   children <-- sheetVar.signal
                     .map(_.map(_.inventory.items.indices.toList).getOrElse(Nil))
@@ -743,7 +758,7 @@ object CharacterEditorView:
                 button(
                   tpe := "button",
                   "Lägg till sak",
-                  onClick --> (_ => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items :+ InventoryItem("")))))
+                  onClick --> (_ => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items :+ InventoryItem("", WeightCategory.Normal)))))
                 ),
                 textField("Minnessak", _.inventory.keepsake, (s, v) => s.copy(inventory = s.inventory.copy(keepsake = v))),
                 div(

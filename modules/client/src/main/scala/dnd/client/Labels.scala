@@ -1,6 +1,6 @@
 package dnd.client
 
-import dnd.shared.{AgeCategory, Attribute, DamageBonus, Grip, Profession, Skill, Species, WeaponProperty}
+import dnd.shared.{AgeCategory, Attribute, DamageBonus, Grip, Profession, Skill, Species, WeaponProperty, WeightCategory}
 
 /** Swedish display labels, matching the physical Drakar och Demoner sheet.
   * The domain model stays in English (the official Dragonbane terms); this
@@ -27,6 +27,11 @@ object Labels:
   def grip(g: Grip): String = g match
     case Grip.OneHanded => "1H"
     case Grip.TwoHanded => "2H"
+
+  def weightCategory(w: WeightCategory): String = w match
+    case WeightCategory.Light  => "Lätt"
+    case WeightCategory.Normal => "Normal"
+    case WeightCategory.Heavy  => "Tung"
 
   // Official Fria Ligan Swedish terms for the weapon feature/property enum,
   // taken from the licensed Foundry VTT system's sv.json localization.
