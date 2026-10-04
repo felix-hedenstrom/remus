@@ -8,8 +8,9 @@ final case class CharacterHeader(
                                   ageCategory: AgeCategory,
                                   profession: Profession,
                                   weakness: NonEmptyString,
-                                  appearance: NonEmptyString
+                                  appearance: NonEmptyString,
+                                  portrait: Option[String]
                                 ) derives Codec, Schema
 
 object CharacterHeader:
-  val default: CharacterHeader = CharacterHeader("<name>", Species.Human, AgeCategory.Adult, Profession.Warrior, "<weakness>", "<appearance>")
+  val default: CharacterHeader = CharacterHeader("<name>", Species.Human, AgeCategory.Adult, Profession.Warrior, "<weakness>", "<appearance>", None)

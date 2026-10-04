@@ -6,6 +6,7 @@ import dnd.shared.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
 import io.github.iltotore.iron.constraint.all.*
+import org.scalajs.dom
 
 object CharacterEditorView:
 
@@ -79,6 +80,96 @@ object CharacterEditorView:
           typ := "text",
           value <-- sheetVar.signal.map(_.map(get).map(_.toString).getOrElse("")),
           onInput.mapToValue --> (v => update(s => set(s, parseNonEmpty(v))))
+        )
+      )
+
+    def nonEmptyTextAreaField(labelText: String, get: CharacterSheet => NonEmptyString, set: (CharacterSheet, NonEmptyString) => CharacterSheet) =
+      div(
+        cls := "field field-textarea",
+        label(labelText),
+        textArea(
+          value <-- sheetVar.signal.map(_.map(get).map(_.toString).getOrElse("")),
+          onInput.mapToValue --> (v => update(s => set(s, parseNonEmpty(v))))
+        )
+      )
+
+    def canvasSized(w: Int, h: Int): dom.html.Canvas =
+      val c = dom.document.createElement("canvas").asInstanceOf[dom.html.Canvas]
+      c.width = w
+      c.height = h
+      c
+
+    // Target sizes for each downscale step, largest first, ending in
+    // (targetW, targetH). Halving repeatedly (instead of one drawImage
+    // straight from full resolution down to the target) avoids the visible
+    // banding/moire artifacts Firefox's canvas resampler produces on a
+    // large single-step downscale - Chrome tolerates the single step fine,
+    // which is why this only showed up in Firefox.
+    def downscaleSteps(w0: Int, h0: Int, targetW: Int, targetH: Int): List[(Int, Int)] =
+      if w0 <= targetW * 2 && h0 <= targetH * 2 then List((targetW, targetH))
+      else
+        val nextW = math.max(targetW, w0 / 2)
+        val nextH = math.max(targetH, h0 / 2)
+        (nextW, nextH) :: downscaleSteps(nextW, nextH, targetW, targetH)
+
+    def downscale(img: dom.html.Image, targetW: Int, targetH: Int): dom.html.Canvas =
+      val steps       = downscaleSteps(img.width, img.height, targetW, targetH)
+      val (w0, h0)    = steps.head
+      val firstCanvas = canvasSized(w0, h0)
+      firstCanvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D].drawImage(img, 0, 0, w0, h0)
+      steps.tail.foldLeft(firstCanvas) { case (prev, (w, h)) =>
+        val next = canvasSized(w, h)
+        next.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D].drawImage(prev, 0, 0, w, h)
+        next
+      }
+
+    // The hidden file input is read via `ev.target`, not a self-reference to
+    // `fileInput`, to sidestep the forward-reference restriction on local
+    // vals; the visible box only ever triggers it via `.ref.click()`.
+    def nameTitleAndPortrait() =
+      val fileInput = input(
+        typ := "file",
+        cls := "portrait-file-input",
+        accept := "image/*",
+        onChange --> { ev =>
+          val target = ev.target.asInstanceOf[dom.html.Input]
+          for
+            files <- Option(target.files)
+            if files.length > 0
+          do
+            val file   = files(0)
+            val reader = new dom.FileReader
+            reader.onload = _ =>
+              val img = dom.document.createElement("img").asInstanceOf[dom.html.Image]
+              img.onload = _ =>
+                val maxDim  = 512.0
+                val scale   = math.min(1.0, maxDim / math.max(img.width, img.height))
+                val targetW = math.max(1, (img.width * scale).toInt)
+                val targetH = math.max(1, (img.height * scale).toInt)
+                val canvas  = downscale(img, targetW, targetH)
+                update(s => s.copy(header = s.header.copy(portrait = Some(canvas.toDataURL("image/jpeg", 0.85)))))
+              img.src = reader.result.asInstanceOf[String]
+            reader.readAsDataURL(file)
+            target.value = ""
+        }
+      )
+      div(
+        cls := "header-top",
+        div(
+          cls := "portrait-box",
+          onClick --> (_ => fileInput.ref.click()),
+          fileInput,
+          child <-- sheetVar.signal.map(_.flatMap(_.header.portrait)).map {
+            case Some(dataUrl) => img(cls := "portrait-img", src := dataUrl)
+            case None          => span(cls := "portrait-placeholder", "Lägg till bild")
+          }
+        ),
+        input(
+          cls := "name-title",
+          typ := "text",
+          placeholder := "Namn",
+          value <-- sheetVar.signal.map(_.map(_.header.name).map(_.toString).getOrElse("")),
+          onInput.mapToValue --> (v => update(s => s.copy(header = s.header.copy(name = parseNonEmpty(v)))))
         )
       )
 
@@ -524,14 +615,34 @@ object CharacterEditorView:
           div(
             cls := "sheet-grid",
             div(
-              cls := "header-section full-width",
-              h2("Karaktär"),
-              nonEmptyTextField("Namn", _.header.name, (s, v) => s.copy(header = s.header.copy(name = v))),
-              speciesField("Släkte"),
-              ageCategoryField("Ålder"),
-              professionField("Yrke"),
-              nonEmptyTextField("Svaghet", _.header.weakness, (s, v) => s.copy(header = s.header.copy(weakness = v))),
-              nonEmptyTextField("Utseende", _.header.appearance, (s, v) => s.copy(header = s.header.copy(appearance = v)))
+              cls := "top-row full-width",
+              div(
+                cls := "header-section",
+                nameTitleAndPortrait(),
+                div(
+                  cls := "header-compact-row",
+                  speciesField("Släkte"),
+                  ageCategoryField("Ålder"),
+                  professionField("Yrke")
+                ),
+                nonEmptyTextAreaField("Svaghet", _.header.weakness, (s, v) => s.copy(header = s.header.copy(weakness = v))),
+                nonEmptyTextAreaField("Utseende", _.header.appearance, (s, v) => s.copy(header = s.header.copy(appearance = v)))
+              ),
+              div(
+                cls := "weapons-section",
+                h2("Vapen"),
+                weaponTableHeader,
+                div(
+                  children <-- sheetVar.signal
+                    .map(_.map(_.weapons.indices.toList).getOrElse(Nil))
+                    .split(identity)((idx, _, _) => weaponRow(idx))
+                ),
+                button(
+                  tpe := "button",
+                  "Lägg till vapen",
+                  onClick --> (_ => update(s => s.copy(weapons = s.weapons :+ Weapon("", Grip.OneHanded, "", "", "", Set.empty))))
+                )
+              )
             ),
             div(
               cls := "attributes-section full-width",
@@ -563,14 +674,31 @@ object CharacterEditorView:
                   tpe := "button",
                   "Lägg till förmåga",
                   onClick --> (_ => update(s => s.copy(abilities = s.abilities :+ Ability(""))))
+                ),
+                resourceTrack("Viljepoäng", "willpower", _.willpower, (r, v) => r.copy(willpower = v)),
+                resourceTrack(
+                  "Kroppspoäng",
+                  "body-points",
+                  _.bodyPoints,
+                  (r, v) => r.copy(bodyPoints = v),
+                  div(
+                    cls := "death-rolls",
+                    // Death rolls only come into play at 0 body points, so
+                    // keep them out of the way otherwise instead of always
+                    // taking up space.
+                    cls("hidden") <-- sheetVar.signal.map(_.exists(_.resources.bodyPoints.current.toInt > 0)),
+                    intField(
+                      "Lyckade dödsslag",
+                      _.resources.deathRolls.successes,
+                      (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(successes = v)))
+                    ),
+                    intField(
+                      "Misslyckade dödsslag",
+                      _.resources.deathRolls.failures,
+                      (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(failures = v)))
+                    )
+                  )
                 )
-              ),
-              div(
-                cls := "currency-section",
-                h2("Pengar"),
-                currencyRow("gold", "Guldmynt", _.currency.gold, (s, v) => s.copy(currency = s.currency.copy(gold = v))),
-                currencyRow("silver", "Silvermynt", _.currency.silver, (s, v) => s.copy(currency = s.currency.copy(silver = v))),
-                currencyRow("copper", "Kopparmynt", _.currency.copper, (s, v) => s.copy(currency = s.currency.copy(copper = v)))
               )
             ),
             div(
@@ -615,92 +743,50 @@ object CharacterEditorView:
                   "Lägg till sak",
                   onClick --> (_ => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items :+ InventoryItem("")))))
                 ),
-                textField("Minnessak", _.inventory.keepsake, (s, v) => s.copy(inventory = s.inventory.copy(keepsake = v)))
+                textField("Minnessak", _.inventory.keepsake, (s, v) => s.copy(inventory = s.inventory.copy(keepsake = v))),
+                div(
+                  cls := "currency-rows",
+                  currencyRow("gold", "Guldmynt", _.currency.gold, (s, v) => s.copy(currency = s.currency.copy(gold = v))),
+                  currencyRow("silver", "Silvermynt", _.currency.silver, (s, v) => s.copy(currency = s.currency.copy(silver = v))),
+                  currencyRow("copper", "Kopparmynt", _.currency.copper, (s, v) => s.copy(currency = s.currency.copy(copper = v)))
+                )
               ),
               div(
-                cls := "resources-section",
-                resourceTrack("Viljepoäng", "willpower", _.willpower, (r, v) => r.copy(willpower = v)),
-                resourceTrack(
-                  "Kroppspoäng",
-                  "body-points",
-                  _.bodyPoints,
-                  (r, v) => r.copy(bodyPoints = v),
-                  div(
-                    cls := "death-rolls",
-                    // Death rolls only come into play at 0 body points, so
-                    // keep them out of the way otherwise instead of always
-                    // taking up space.
-                    cls("hidden") <-- sheetVar.signal.map(_.exists(_.resources.bodyPoints.current.toInt > 0)),
-                    intField(
-                      "Lyckade dödsslag",
-                      _.resources.deathRolls.successes,
-                      (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(successes = v)))
-                    ),
-                    intField(
-                      "Misslyckade dödsslag",
-                      _.resources.deathRolls.failures,
-                      (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(failures = v)))
-                    )
+                cls := "armor-section",
+                h2("Rustning"),
+                textField("Rustningstyp", _.armor.armorType, (s, v) => s.copy(armor = s.armor.copy(armorType = v))),
+                div(
+                  cls := "armor-row",
+                  div(cls := "icon-shield"),
+                  intField("Skyddsvärde rustning", _.armor.protection, (s, v) => s.copy(armor = s.armor.copy(protection = v))),
+                  checkboxField("Nackdel: Smyga", _.armor.penalties.sneaking, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(sneaking = v)))),
+                  checkboxField("Nackdel: Undvika", _.armor.penalties.evade, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(evade = v)))),
+                  checkboxField(
+                    "Nackdel: Hoppa & klättra",
+                    _.armor.penalties.acrobatics,
+                    (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(acrobatics = v)))
                   )
                 )
-              )
-            ),
-            div(
-              cls := "armor-section col-6",
-              h2("Rustning & hjälm"),
-              div(
-                cls := "armor-groups",
-                div(
-                  cls := "armor-group",
-                  textField("Rustningstyp", _.armor.armorType, (s, v) => s.copy(armor = s.armor.copy(armorType = v))),
-                  div(
-                    cls := "armor-row",
-                    div(cls := "icon-shield"),
-                    intField("Skyddsvärde rustning", _.armor.protection, (s, v) => s.copy(armor = s.armor.copy(protection = v))),
-                    checkboxField("Nackdel: Smyga", _.armor.penalties.sneaking, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(sneaking = v)))),
-                    checkboxField("Nackdel: Undvika", _.armor.penalties.evade, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(evade = v)))),
-                    checkboxField(
-                      "Nackdel: Hoppa & klättra",
-                      _.armor.penalties.acrobatics,
-                      (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(acrobatics = v)))
-                    )
-                  )
-                ),
-                div(cls := "armor-divider"),
-                div(
-                  cls := "armor-group",
-                  textField("Hjälmtyp", _.armor.helmetType, (s, v) => s.copy(armor = s.armor.copy(helmetType = v))),
-                  div(
-                    cls := "armor-row",
-                    div(cls := "icon-helmet"),
-                    intField("Skyddsvärde hjälm", _.armor.helmetProtection, (s, v) => s.copy(armor = s.armor.copy(helmetProtection = v))),
-                    checkboxField(
-                      "Nackdel: Upptäcka fara",
-                      _.armor.helmetPenalties.spotHidden,
-                      (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(spotHidden = v)))
-                    ),
-                    checkboxField(
-                      "Nackdel: Avståndsattacker",
-                      _.armor.helmetPenalties.rangedAttacks,
-                      (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(rangedAttacks = v)))
-                    )
-                  )
-                )
-              )
-            ),
-            div(
-              cls := "weapons-section col-6",
-              h2("Vapen"),
-              weaponTableHeader,
-              div(
-                children <-- sheetVar.signal
-                  .map(_.map(_.weapons.indices.toList).getOrElse(Nil))
-                  .split(identity)((idx, _, _) => weaponRow(idx))
               ),
-              button(
-                tpe := "button",
-                "Lägg till vapen",
-                onClick --> (_ => update(s => s.copy(weapons = s.weapons :+ Weapon("", Grip.OneHanded, "", "", "", Set.empty))))
+              div(
+                cls := "helmet-section",
+                h2("Hjälm"),
+                textField("Hjälmtyp", _.armor.helmetType, (s, v) => s.copy(armor = s.armor.copy(helmetType = v))),
+                div(
+                  cls := "armor-row",
+                  div(cls := "icon-helmet"),
+                  intField("Skyddsvärde hjälm", _.armor.helmetProtection, (s, v) => s.copy(armor = s.armor.copy(helmetProtection = v))),
+                  checkboxField(
+                    "Nackdel: Upptäcka fara",
+                    _.armor.helmetPenalties.spotHidden,
+                    (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(spotHidden = v)))
+                  ),
+                  checkboxField(
+                    "Nackdel: Avståndsattacker",
+                    _.armor.helmetPenalties.rangedAttacks,
+                    (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(rangedAttacks = v)))
+                  )
+                )
               )
             )
           )

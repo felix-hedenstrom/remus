@@ -71,13 +71,12 @@ h2 {
 /* panels */
 section,
 .header-section,
-.resources-section,
 .skills-section,
 .abilities-section,
 .armor-section,
+.helmet-section,
 .weapons-section,
 .inventory-section,
-.currency-section,
 .attributes-section {
   background:
     radial-gradient(circle at 15% 20%, rgba(90, 70, 40, 0.05), transparent 40%),
@@ -120,15 +119,90 @@ section,
 .field-select-custom select { flex: 0 0 auto; }
 .field-select-custom input[type="text"] { flex: 1; min-width: 6rem; }
 
-.header-section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.2rem 1rem;
-  align-items: start;
+.top-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
 }
-.header-section > h2 { grid-column: 1 / -1; }
+
+.header-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  max-width: 40rem;
+}
 .header-section .field { margin-bottom: 0; }
-.header-section .field > label { width: 6rem; flex: 0 0 auto; }
+
+.top-row > .weapons-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.portrait-box {
+  flex: 0 0 auto;
+  width: 4.5rem;
+  height: 5.5rem;
+  border: 1px solid var(--metal-bronze);
+  border-radius: 4px;
+  background: var(--parchment-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.portrait-box:hover { filter: brightness(0.97); }
+.portrait-file-input { display: none; }
+.portrait-img { width: 100%; height: 100%; object-fit: cover; }
+.portrait-placeholder {
+  font-size: 0.7rem;
+  text-align: center;
+  color: var(--metal-iron);
+  padding: 0.2rem;
+}
+
+input.name-title[type="text"] {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+  letter-spacing: 0.03em;
+  text-align: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--ink);
+  padding: 0.2rem;
+}
+input.name-title[type="text"]:focus {
+  outline: none;
+  border-bottom: 2px solid var(--moss);
+}
+
+.header-compact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.2rem;
+}
+.header-compact-row .field {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+.header-compact-row .field > label { width: auto; }
+.header-compact-row .field > select { max-width: 9rem; }
+.header-compact-row .field-select-custom input[type="text"] { min-width: 7rem; max-width: 9rem; }
+
+.field-textarea { align-items: flex-start; }
+.field-textarea > label { padding-top: 0.25rem; }
+.field-textarea > textarea { flex: 1; min-width: 0; resize: vertical; min-height: 3.2rem; }
 
 /* themed +/- stepper wrapping a number input, used anywhere a plain numeric
    field appears (skills, resources, currency, armor, carry capacity, ...) */
@@ -429,6 +503,7 @@ input.attribute-value {
   border: 1px solid var(--metal-bronze);
   border-radius: 6px;
   padding: 0.3rem 0.5rem;
+  margin-top: 0.4rem;
   margin-bottom: 0.3rem;
   background: var(--parchment-dark);
 }
@@ -581,9 +656,6 @@ input.attribute-value {
 }
 
 /* armor */
-.armor-groups { display: flex; align-items: stretch; gap: 1.25rem; }
-.armor-group { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-.armor-divider { width: 1px; align-self: stretch; background: var(--metal-bronze); opacity: 0.6; }
 .armor-row { display: flex; align-items: center; gap: 0.5rem 0.75rem; flex-wrap: wrap; }
 .armor-row .field-narrow { flex: 0 0 auto; }
 
@@ -607,7 +679,7 @@ input.attribute-value {
 }
 
 /* currency */
-.currency-section { display: flex; flex-direction: column; gap: 0.4rem; }
+.currency-rows { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.6rem 1rem; margin-top: 0.4rem; }
 
 .currency-row { display: flex; align-items: center; gap: 0.6rem; }
 
