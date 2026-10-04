@@ -2,6 +2,7 @@ package dnd.server
 
 import dnd.server.db.{CharacterRepo, TestDb, UserRepo}
 import dnd.shared.ApiError
+import io.github.iltotore.iron.autoRefine
 import zio.*
 import zio.test.*
 

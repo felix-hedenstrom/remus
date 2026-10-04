@@ -21,7 +21,7 @@ object CharacterListView:
     def createCharacter(): Unit =
       AppRuntime.run(Api.createCharacter())(
         onSuccess = {
-          case Right(character) => AppState.page.set(Page.CharacterEditor(character.id))
+          case Right(character) => AppState.openCharacter(character.id)
           case Left(err)        => AppState.showError(err.message)
         },
         onFailure = t => AppState.showError(t.getMessage)
@@ -62,9 +62,12 @@ object CharacterListView:
         children <-- characters.signal.map(_.map { c =>
           div(
             cls := "character-row",
-            span(cls := "name", if c.name.trim.isEmpty then "(namnlös)" else c.name),
-            span(cls := "meta", s"${c.species} ${c.profession}".trim),
-            button(tpe := "button", "Öppna", onClick --> (_ => AppState.page.set(Page.CharacterEditor(c.id)))),
+            span(
+              cls := "name",
+              onClick --> (_ => AppState.openCharacter(c.id)),
+              if c.name.trim.isEmpty then "(namnlös)" else c.name
+            ),
+            span(cls := "meta", s"${Labels.species(c.species)} ${Labels.profession(c.profession)}".trim),
             button(tpe := "button", "Ta bort", onClick --> (_ => deleteCharacter(c.id)))
           )
         })

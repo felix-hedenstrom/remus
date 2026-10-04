@@ -13,7 +13,7 @@ object Main:
       onSuccess = {
         case Right(user) =>
           AppState.currentUser.set(Some(user))
-          AppState.page.set(Page.CharacterList)
+          AppState.page.set(AppState.pageFromLocation(Page.CharacterList))
         case Left(_) => ()
       },
       onFailure = _ => ()

@@ -15,16 +15,27 @@ object CharacterEditorView:
   private def parseAttributeValue(v: String): AttributeValue =
     v.toIntOption.getOrElse(0).max(0).min(20).refineUnsafe[Interval.Closed[0, 20]]
 
+  // Trusted-default fallback so clearing a text field mid-edit can't crash
+  // on an empty NonEmptyString - "-" stands in until the user types again.
+  private def parseNonEmpty(v: String): NonEmptyString =
+    (if v.trim.isEmpty then "-" else v).refineUnsafe[Not[Blank]]
+
   def apply(id: Long): Element =
     val sheetVar: Var[Option[CharacterSheet]] = Var(None)
     val saving                                = Var(false)
     val savedJustNow                          = Var(false)
+    // Separate from sheetVar (which changes on every keystroke) and set
+    // exactly once, so the signal driving the form's mount below can never
+    // re-fire mid-edit regardless of Signal dedup semantics.
+    val loaded: Var[Boolean] = Var(false)
 
     def load(): Unit =
       AppRuntime.run(Api.getCharacter(id))(
         onSuccess = {
-          case Right(character) => sheetVar.set(Some(character.sheet))
-          case Left(err)        => AppState.showError(err.message)
+          case Right(character) =>
+            sheetVar.set(Some(character.sheet))
+            loaded.set(true)
+          case Left(err) => AppState.showError(err.message)
         },
         onFailure = t => AppState.showError(t.getMessage)
       )
@@ -60,14 +71,136 @@ object CharacterEditorView:
         )
       )
 
-    def intField(labelText: String, get: CharacterSheet => NonNegativeInt, set: (CharacterSheet, NonNegativeInt) => CharacterSheet) =
+    def nonEmptyTextField(labelText: String, get: CharacterSheet => NonEmptyString, set: (CharacterSheet, NonEmptyString) => CharacterSheet) =
+      div(
+        cls := "field",
+        label(labelText),
+        input(
+          typ := "text",
+          value <-- sheetVar.signal.map(_.map(get).map(_.toString).getOrElse("")),
+          onInput.mapToValue --> (v => update(s => set(s, parseNonEmpty(v))))
+        )
+      )
+
+    val customMarker = "__custom__"
+
+    def speciesField(labelText: String) =
+      // The custom-name input is created once (not inside a signal-driven
+      // child block) so typing into it doesn't tear down and rebuild the
+      // element - and lose focus - on every keystroke.
+      val customInput = input(
+        typ := "text",
+        placeholder := "Släkte",
+        value <-- sheetVar.signal.map(_.map(_.header.species) collect { case Species.Custom(name) => name.toString } getOrElse ""),
+        onInput.mapToValue --> (v =>
+          update(s => s.copy(header = s.header.copy(species = Species.Custom(parseNonEmpty(v)))))
+        )
+      )
+      div(
+        cls := "field field-select-custom",
+        label(labelText),
+        select(
+          value <-- sheetVar.signal.map(_.map(_.header.species).collect { case Species.Custom(_) => customMarker }.getOrElse(Species.Human.label)),
+          onChange.mapToValue --> { v =>
+            val newSpecies = if v == customMarker then Species.Custom("Annat".refineUnsafe[Not[Blank]]) else Species.Human
+            update(s => s.copy(header = s.header.copy(species = newSpecies)))
+          },
+          option(value := Species.Human.label, Labels.species(Species.Human)),
+          option(value := customMarker, "Annat...")
+        ),
+        child <-- sheetVar.signal.map(_.exists(_.header.species.isInstanceOf[Species.Custom])).map {
+          if _ then customInput else emptyNode
+        }
+      )
+
+    def professionField(labelText: String) =
+      val customInput = input(
+        typ := "text",
+        placeholder := "Yrke",
+        value <-- sheetVar.signal.map(_.map(_.header.profession) collect { case Profession.Custom(name) => name.toString } getOrElse ""),
+        onInput.mapToValue --> (v =>
+          update(s => s.copy(header = s.header.copy(profession = Profession.Custom(parseNonEmpty(v)))))
+        )
+      )
+      div(
+        cls := "field field-select-custom",
+        label(labelText),
+        select(
+          value <-- sheetVar.signal.map(_.map(_.header.profession).collect { case Profession.Custom(_) => customMarker }.getOrElse(Profession.Warrior.label)),
+          onChange.mapToValue --> { v =>
+            val newProfession = if v == customMarker then Profession.Custom("Annat".refineUnsafe[Not[Blank]]) else Profession.Warrior
+            update(s => s.copy(header = s.header.copy(profession = newProfession)))
+          },
+          option(value := Profession.Warrior.label, Labels.profession(Profession.Warrior)),
+          option(value := customMarker, "Annat...")
+        ),
+        child <-- sheetVar.signal.map(_.exists(_.header.profession.isInstanceOf[Profession.Custom])).map {
+          if _ then customInput else emptyNode
+        }
+      )
+
+    def damageBonusField(labelText: String, get: CharacterSheet => DamageBonus, set: (CharacterSheet, DamageBonus) => CharacterSheet) =
       div(
         cls := "field field-narrow",
         label(labelText),
-        input(
-          typ := "number",
-          value <-- sheetVar.signal.map(_.map(s => get(s).toString).getOrElse("0")),
-          onInput.mapToValue --> (v => update(s => set(s, parseNonNegative(v))))
+        select(
+          value <-- sheetVar.signal.map(_.map(get).map(_.ordinal.toString).getOrElse("0")),
+          onChange.mapToValue --> (v => update(s => set(s, DamageBonus.fromOrdinal(v.toInt)))),
+          DamageBonus.values.map(d => option(value := d.ordinal.toString, Labels.damageBonus(d)))
+        )
+      )
+
+    def ageCategoryField(labelText: String) =
+      div(
+        cls := "field",
+        label(labelText),
+        select(
+          value <-- sheetVar.signal.map(_.map(_.header.ageCategory).map(_.ordinal.toString).getOrElse("0")),
+          onChange.mapToValue --> (v =>
+            update(s => s.copy(header = s.header.copy(ageCategory = AgeCategory.fromOrdinal(v.toInt))))
+          ),
+          AgeCategory.values.map(a => option(value := a.ordinal.toString, Labels.ageCategory(a)))
+        )
+      )
+
+    // Wraps a number input with themed +/- buttons that read/write through
+    // the same get/set the input itself uses, so every call site stays the
+    // source of truth for how its value is read and clamped (parseNonNegative
+    // already floors at 0, so a decrement below 0 settles at 0 for free).
+    def stepButton(symbol: String, onClick0: () => Unit) =
+      button(tpe := "button", cls := "num-step", symbol, onClick --> (_ => onClick0()))
+
+    def intField(labelText: String, get: CharacterSheet => NonNegativeInt, set: (CharacterSheet, NonNegativeInt) => CharacterSheet) =
+      def bump(delta: Int): Unit = update(s => set(s, parseNonNegative((get(s).toInt + delta).toString)))
+      div(
+        cls := "field field-narrow",
+        label(labelText),
+        div(
+          cls := "num-stepper",
+          stepButton("−", () => bump(-1)),
+          input(
+            typ := "number",
+            value <-- sheetVar.signal.map(_.map(s => get(s).toString).getOrElse("0")),
+            onInput.mapToValue --> (v => update(s => set(s, parseNonNegative(v))))
+          ),
+          stepButton("+", () => bump(1))
+        )
+      )
+
+    def currencyRow(iconClass: String, labelText: String, get: CharacterSheet => NonNegativeInt, set: (CharacterSheet, NonNegativeInt) => CharacterSheet) =
+      def bump(delta: Int): Unit = update(s => set(s, parseNonNegative((get(s).toInt + delta).toString)))
+      div(
+        cls := "currency-row",
+        div(cls := s"currency-icon $iconClass", title := labelText),
+        div(
+          cls := "num-stepper",
+          stepButton("−", () => bump(-1)),
+          input(
+            typ := "number",
+            value <-- sheetVar.signal.map(_.map(s => get(s).toString).getOrElse("0")),
+            onInput.mapToValue --> (v => update(s => set(s, parseNonNegative(v))))
+          ),
+          stepButton("+", () => bump(1))
         )
       )
 
@@ -91,18 +224,22 @@ object CharacterEditorView:
       div(
         cls := "attribute",
         div(cls := "attribute-name", name),
-        input(
-          typ := "number",
-          cls := "attribute-value",
-          value <-- sheetVar.signal.map(_.map(s => get(s.attributes).value.toString).getOrElse("0")),
-          onInput.mapToValue --> (v =>
-            update(s => s.copy(attributes = set(s.attributes, get(s.attributes).copy(value = parseAttributeValue(v)))))
+        div(
+          cls := "attribute-ring",
+          input(
+            typ := "number",
+            cls := "attribute-value",
+            value <-- sheetVar.signal.map(_.map(s => get(s.attributes).value.toString).getOrElse("0")),
+            onInput.mapToValue --> (v =>
+              update(s => s.copy(attributes = set(s.attributes, get(s.attributes).copy(value = parseAttributeValue(v)))))
+            )
           )
         ),
         label(
-          cls := "checkbox-field",
+          cls := "attribute-toggle-field",
           input(
             typ := "checkbox",
+            cls := "attribute-toggle",
             checked <-- sheetVar.signal.map(_.exists(s => get(s.attributes).distressed)),
             onClick.mapToChecked --> (v =>
               update(s => s.copy(attributes = set(s.attributes, get(s.attributes).copy(distressed = v))))
@@ -145,114 +282,256 @@ object CharacterEditorView:
         div(
           cls := "field field-narrow",
           label("Max"),
-          input(
-            typ := "number",
-            cls := "resource-max",
-            value <-- sheetVar.signal.map(_.map(s => get(s.resources).max.toString).getOrElse("0")),
-            onInput.mapToValue --> (v =>
-              update(s => s.copy(resources = set(s.resources, get(s.resources).copy(max = parseNonNegative(v)))))
+          div(
+            cls := "num-stepper",
+            stepButton(
+              "−",
+              () => update(s => s.copy(resources = set(s.resources, get(s.resources).copy(max = parseNonNegative((get(s.resources).max.toInt - 1).toString)))))
+            ),
+            input(
+              typ := "number",
+              cls := "resource-max",
+              value <-- sheetVar.signal.map(_.map(s => get(s.resources).max.toString).getOrElse("0")),
+              onInput.mapToValue --> (v =>
+                update(s => s.copy(resources = set(s.resources, get(s.resources).copy(max = parseNonNegative(v)))))
+              )
+            ),
+            stepButton(
+              "+",
+              () => update(s => s.copy(resources = set(s.resources, get(s.resources).copy(max = parseNonNegative((get(s.resources).max.toInt + 1).toString)))))
             )
           )
         )
       ) ++ extra
       div(mods*)
 
+    // Toggled by clicking a skill's mark - the sheet's record that the skill
+    // was rolled with a 1 or 20 (dragon/demon), making it eligible to
+    // increase at the next level-up.
+    def toggleSkillMark(skill: Skill): Unit =
+      update(s => s.copy(skills = s.skills.map(sv => if sv.skill == skill then sv.copy(markedForAdvancement = !sv.markedForAdvancement) else sv)))
+
     def skillRow(skill: Skill) =
       div(
         cls := "skill-row",
+        span(
+          cls := "skill-mark",
+          cls("marked") <-- sheetVar.signal.map(_.flatMap(_.skills.find(_.skill == skill)).exists(_.markedForAdvancement)),
+          title := "Markera för färdighetsökning (vid ett resultat av 1 eller 20)",
+          onClick --> (_ => toggleSkillMark(skill))
+        ),
         span(cls := "skill-name", Labels.skill(skill)),
         span(cls := "skill-attr", Labels.attribute(skill.attribute)),
-        input(
-          typ := "number",
-          cls := "skill-value",
-          value <-- sheetVar.signal.map(
-            _.flatMap(_.skills.find(_.skill == skill)).map(_.value.toString).getOrElse("0")
-          ),
-          onInput.mapToValue --> { v =>
-            val newValue = parseNonNegative(v)
+        {
+          def currentValue(sheetOpt: Option[CharacterSheet]): Int =
+            sheetOpt.flatMap(_.skills.find(_.skill == skill)).map(_.value.toInt).getOrElse(0)
+          def setValue(newValue: NonNegativeInt): Unit =
             update(s => s.copy(skills = s.skills.map(sv => if sv.skill == skill then sv.copy(value = newValue) else sv)))
-          }
-        )
+          def bump(delta: Int): Unit = setValue(parseNonNegative((currentValue(sheetVar.now()) + delta).toString))
+          div(
+            cls := "num-stepper",
+            stepButton("−", () => bump(-1)),
+            input(
+              typ := "number",
+              cls := "skill-value",
+              value <-- sheetVar.signal.map(s => currentValue(s).toString),
+              onInput.mapToValue --> (v => setValue(parseNonNegative(v)))
+            ),
+            stepButton("+", () => bump(1))
+          )
+        }
       )
 
-    def weaponRow(index: Int, weapon: Weapon) =
+    // Rows below are rendered via `.split` on a signal of *indices* (not of
+    // the row data itself), keyed by index - so a DOM row is created once
+    // per index and reused across edits instead of being torn down on every
+    // keystroke anywhere in the sheet. Each row then reads its own live
+    // value via an index lookup into sheetVar, the same way skillRow does.
+    // (Rendering these rows directly off `sheetVar.signal.map(_.list.zipWithIndex.map(rowFn))`
+    // - as this used to - rebuilds every row's DOM on every keystroke, which
+    // is what caused the focus-loss bug in "Sekundära färdigheter".)
+
+    def weaponRow(index: Int) =
+      def weaponAt(sheetOpt: Option[CharacterSheet]): Option[Weapon] = sheetOpt.flatMap(_.weapons.lift(index))
       def field(get: Weapon => String, set: (Weapon, String) => Weapon, placeholderText: String) =
         input(
           typ := "text",
           placeholder := placeholderText,
-          value := get(weapon),
+          value <-- sheetVar.signal.map(weaponAt(_).map(get).getOrElse("")),
           onInput.mapToValue --> (v =>
             update(s => s.copy(weapons = s.weapons.updated(index, set(s.weapons(index), v))))
           )
         )
+      val gripSelect =
+        select(
+          value <-- sheetVar.signal.map(weaponAt(_).map(_.grip.ordinal.toString).getOrElse("0")),
+          onChange.mapToValue --> (v =>
+            update(s => s.copy(weapons = s.weapons.updated(index, s.weapons(index).copy(grip = Grip.fromOrdinal(v.toInt)))))
+          ),
+          Grip.values.map(g => option(value := g.ordinal.toString, Labels.grip(g)))
+        )
+      val selectedProperties = sheetVar.signal.map(weaponAt(_).map(_.properties).getOrElse(Set.empty[WeaponProperty]))
+      def toggleProperty(p: WeaponProperty): Unit =
+        update { s =>
+          val w        = s.weapons(index)
+          val newProps = if w.properties.contains(p) then w.properties - p else w.properties + p
+          s.copy(weapons = s.weapons.updated(index, w.copy(properties = newProps)))
+        }
+      val propertiesPicker =
+        detailsTag(
+          cls := "weapon-properties",
+          summaryTag(
+            child.text <-- selectedProperties.map(ps =>
+              if ps.isEmpty then "Välj..." else WeaponProperty.values.filter(ps).map(Labels.weaponProperty).mkString(", ")
+            )
+          ),
+          div(
+            cls := "weapon-properties-menu",
+            WeaponProperty.values.map { p =>
+              label(
+                cls := "checkbox-field",
+                input(
+                  typ := "checkbox",
+                  checked <-- selectedProperties.map(_.contains(p)),
+                  onClick --> (_ => toggleProperty(p))
+                ),
+                Labels.weaponProperty(p)
+              )
+            }
+          )
+        )
       div(
         cls := "weapon-row",
-        field(_.name, (w, v) => w.copy(name = v), "Vapen"),
-        field(_.grip, (w, v) => w.copy(grip = v), "Grepp"),
+        field(_.name, (w, v) => w.copy(name = v), "Vapen/Sköld"),
+        gripSelect,
         field(_.range, (w, v) => w.copy(range = v), "Räckvidd"),
         field(_.damage, (w, v) => w.copy(damage = v), "Skada"),
         field(_.breakValue, (w, v) => w.copy(breakValue = v), "Brytvärde"),
-        field(_.properties, (w, v) => w.copy(properties = v), "Egenskaper"),
-        button(tpe := "button", "Ta bort", onClick --> (_ => update(s => s.copy(weapons = s.weapons.patch(index, Nil, 1)))))
+        propertiesPicker,
+        button(tpe := "button", cls := "remove-row", "×", onClick --> (_ => update(s => s.copy(weapons = s.weapons.patch(index, Nil, 1)))))
       )
 
-    def itemRow(index: Int, item: InventoryItem) =
+    val weaponTableHeader =
+      div(
+        cls := "weapon-row weapon-table-header",
+        span("Vapen/Sköld"),
+        span("Grepp"),
+        span("Räckvidd"),
+        span("Skada"),
+        span("Brytvärde"),
+        span("Egenskaper"),
+        span()
+      )
+
+    def itemRow(index: Int) =
       div(
         cls := "item-row",
         input(
           typ := "text",
-          value := item.text,
+          value <-- sheetVar.signal.map(_.flatMap(_.inventory.items.lift(index)).map(_.text).getOrElse("")),
           onInput.mapToValue --> (v => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items.updated(index, InventoryItem(v))))))
         ),
-        button(tpe := "button", "Ta bort", onClick --> (_ => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items.patch(index, Nil, 1))))))
+        button(tpe := "button", cls := "remove-row", "×", onClick --> (_ => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items.patch(index, Nil, 1))))))
       )
 
-    def secondarySkillRow(index: Int, skill: SecondarySkill) =
+    def abilityRow(index: Int) =
+      div(
+        cls := "item-row",
+        input(
+          typ := "text",
+          value <-- sheetVar.signal.map(_.flatMap(_.abilities.lift(index)).map(_.text).getOrElse("")),
+          onInput.mapToValue --> (v => update(s => s.copy(abilities = s.abilities.updated(index, Ability(v)))))
+        ),
+        button(tpe := "button", cls := "remove-row", "×", onClick --> (_ => update(s => s.copy(abilities = s.abilities.patch(index, Nil, 1)))))
+      )
+
+    def updateSecondarySkill(index: Int)(f: SecondarySkill => SecondarySkill): Unit =
+      update(s => s.copy(secondarySkills = s.secondarySkills.updated(index, f(s.secondarySkills(index)))))
+
+    def secondarySkillRow(index: Int) =
+      def skillAt(sheetOpt: Option[CharacterSheet]): Option[SecondarySkill] = sheetOpt.flatMap(_.secondarySkills.lift(index))
       div(
         cls := "secondary-skill-row",
+        span(
+          cls := "skill-mark",
+          cls("marked") <-- sheetVar.signal.map(skillAt(_).exists(_.markedForAdvancement)),
+          title := "Markera för färdighetsökning (vid ett resultat av 1 eller 20)",
+          onClick --> (_ => updateSecondarySkill(index)(sk => sk.copy(markedForAdvancement = !sk.markedForAdvancement)))
+        ),
         input(
           typ := "text",
           placeholder := "Namn",
-          value := skill.name,
-          onInput.mapToValue --> (v => update(s => s.copy(secondarySkills = s.secondarySkills.updated(index, s.secondarySkills(index).copy(name = v)))))
+          cls := "secondary-skill-name",
+          value <-- sheetVar.signal.map(skillAt(_).map(_.name).getOrElse("")),
+          onInput.mapToValue --> (v => updateSecondarySkill(index)(_.copy(name = v)))
         ),
-        input(
-          typ := "number",
-          value := skill.value.toString,
-          onInput.mapToValue --> (v =>
-            update(s => s.copy(secondarySkills = s.secondarySkills.updated(index, s.secondarySkills(index).copy(value = parseNonNegative(v)))))
+        select(
+          cls := "secondary-skill-attr",
+          value <-- sheetVar.signal.map(skillAt(_).map(_.attribute.ordinal.toString).getOrElse("0")),
+          onChange.mapToValue --> (v => updateSecondarySkill(index)(_.copy(attribute = Attribute.fromOrdinal(v.toInt)))),
+          Attribute.values.map(a => option(value := a.ordinal.toString, Labels.attribute(a)))
+        ),
+        {
+          def bump(delta: Int): Unit =
+            val current = skillAt(sheetVar.now()).map(_.value.toInt).getOrElse(0)
+            updateSecondarySkill(index)(_.copy(value = parseNonNegative((current + delta).toString)))
+          div(
+            cls := "num-stepper",
+            stepButton("−", () => bump(-1)),
+            input(
+              typ := "number",
+              cls := "skill-value",
+              value <-- sheetVar.signal.map(skillAt(_).map(_.value.toString).getOrElse("0")),
+              onInput.mapToValue --> (v => updateSecondarySkill(index)(_.copy(value = parseNonNegative(v))))
+            ),
+            stepButton("+", () => bump(1))
           )
-        ),
-        button(tpe := "button", "Ta bort", onClick --> (_ => update(s => s.copy(secondarySkills = s.secondarySkills.patch(index, Nil, 1)))))
+        },
+        button(tpe := "button", cls := "remove-row", "×", onClick --> (_ => update(s => s.copy(secondarySkills = s.secondarySkills.patch(index, Nil, 1)))))
       )
 
     val (generalSkillsCol1, generalSkillsCol2) =
       Skill.generalSkillsOrdered.splitAt((Skill.generalSkillsOrdered.size + 1) / 2)
+    val (weaponSkillsCol1, weaponSkillsCol2) =
+      Skill.weaponSkillsOrdered.splitAt((Skill.weaponSkillsOrdered.size + 1) / 2)
 
     div(
       cls := "character-editor-view",
       onMountCallback(_ => load()),
       div(
         cls := "toolbar",
-        button(tpe := "button", "Tillbaka", onClick --> (_ => AppState.page.set(Page.CharacterList))),
-        button(tpe := "button", disabled <-- saving.signal, "Spara", onClick --> (_ => save())),
-        child.text <-- savedJustNow.signal.map(if _ then "Sparat!" else "")
+        button(tpe := "button", "Tillbaka", onClick --> (_ => AppState.goToList())),
+        // Grouped so the status text appearing/disappearing next to "Spara"
+        // can't shift the button's own position - previously both were
+        // direct siblings of this space-between toolbar, so the button
+        // visibly jumped whenever "Sparat!" appeared or cleared.
+        div(
+          cls := "save-group",
+          button(tpe := "button", disabled <-- saving.signal, "Spara", onClick --> (_ => save())),
+          span(cls := "save-status", child.text <-- savedJustNow.signal.map(if _ then "Sparat!" else ""))
+        )
       ),
-      child <-- sheetVar.signal.map {
-        case None => div("Laddar...")
-        case Some(_) =>
+      // Keyed on `loaded` (set exactly once in load()), not on sheetVar's
+      // value, so this whole form is built once and never torn down again.
+      // Every field below reads/writes sheetVar independently via its own
+      // `value <--`/`onInput` binding on a stable element; if this outer
+      // block were keyed on sheetVar (which changes on every keystroke),
+      // every edit in any field would rebuild the entire form and drop
+      // input focus - which is exactly what happened before this fix.
+      child <-- loaded.signal.map {
+        case false => div("Laddar...")
+        case true =>
           div(
             cls := "sheet-grid",
             div(
               cls := "header-section full-width",
               h2("Karaktär"),
-              textField("Namn", _.header.name, (s, v) => s.copy(header = s.header.copy(name = v))),
-              textField("Spelare", _.header.playerName, (s, v) => s.copy(header = s.header.copy(playerName = v))),
-              textField("Släkte", _.header.species, (s, v) => s.copy(header = s.header.copy(species = v))),
-              textField("Ålder", _.header.ageCategory, (s, v) => s.copy(header = s.header.copy(ageCategory = v))),
-              textField("Yrke", _.header.profession, (s, v) => s.copy(header = s.header.copy(profession = v))),
-              textField("Svaghet", _.header.weakness, (s, v) => s.copy(header = s.header.copy(weakness = v))),
-              textField("Utseende", _.header.appearance, (s, v) => s.copy(header = s.header.copy(appearance = v)))
+              nonEmptyTextField("Namn", _.header.name, (s, v) => s.copy(header = s.header.copy(name = v))),
+              speciesField("Släkte"),
+              ageCategoryField("Ålder"),
+              professionField("Yrke"),
+              nonEmptyTextField("Svaghet", _.header.weakness, (s, v) => s.copy(header = s.header.copy(weakness = v))),
+              nonEmptyTextField("Utseende", _.header.appearance, (s, v) => s.copy(header = s.header.copy(appearance = v)))
             ),
             div(
               cls := "attributes-section full-width",
@@ -262,130 +541,167 @@ object CharacterEditorView:
               attributeBlock("SMI", "Omtöcknad", _.agility, (a, v) => a.copy(agility = v)),
               attributeBlock("INT", "Arg", _.intelligence, (a, v) => a.copy(intelligence = v)),
               attributeBlock("PSY", "Rädd", _.will, (a, v) => a.copy(will = v)),
-              attributeBlock("KAR", "Uppgiven", _.charisma, (a, v) => a.copy(charisma = v))
+              attributeBlock("KAR", "Uppgiven", _.charisma, (a, v) => a.copy(charisma = v)),
+              div(
+                cls := "combat-strip",
+                damageBonusField("Skadebonus STY", _.combatStats.damageBonusStr, (s, v) => s.copy(combatStats = s.combatStats.copy(damageBonusStr = v))),
+                damageBonusField("Skadebonus SMI", _.combatStats.damageBonusAgl, (s, v) => s.copy(combatStats = s.combatStats.copy(damageBonusAgl = v))),
+                intField("Förflyttning", _.combatStats.movement, (s, v) => s.copy(combatStats = s.combatStats.copy(movement = v)))
+              )
             ),
-            div(cls := "divider"),
             div(
-              cls := "skills-section full-width",
+              cls := "col-3 stack",
+              div(
+                cls := "abilities-section",
+                h2("Förmågor & besvärjelser"),
+                div(
+                  children <-- sheetVar.signal
+                    .map(_.map(_.abilities.indices.toList).getOrElse(Nil))
+                    .split(identity)((idx, _, _) => abilityRow(idx))
+                ),
+                button(
+                  tpe := "button",
+                  "Lägg till förmåga",
+                  onClick --> (_ => update(s => s.copy(abilities = s.abilities :+ Ability(""))))
+                )
+              ),
+              div(
+                cls := "currency-section",
+                h2("Pengar"),
+                currencyRow("gold", "Guldmynt", _.currency.gold, (s, v) => s.copy(currency = s.currency.copy(gold = v))),
+                currencyRow("silver", "Silvermynt", _.currency.silver, (s, v) => s.copy(currency = s.currency.copy(silver = v))),
+                currencyRow("copper", "Kopparmynt", _.currency.copper, (s, v) => s.copy(currency = s.currency.copy(copper = v)))
+              )
+            ),
+            div(
+              cls := "skills-section col-6",
               h2("Färdigheter"),
               div(
                 cls := "skills-grid",
-                div(cls := "skills-col", children <-- sheetVar.signal.map(_ => generalSkillsCol1.map(skillRow))),
-                div(cls := "skills-col", children <-- sheetVar.signal.map(_ => generalSkillsCol2.map(skillRow)))
+                div(cls := "skills-col", generalSkillsCol1.map(skillRow)),
+                div(cls := "skills-col", generalSkillsCol2.map(skillRow))
               ),
               h2("Vapenfärdigheter"),
               div(
                 cls := "skills-grid",
-                div(cls := "skills-col", children <-- sheetVar.signal.map(_ => Skill.weaponSkillsOrdered.map(skillRow)))
+                div(cls := "skills-col", weaponSkillsCol1.map(skillRow)),
+                div(cls := "skills-col", weaponSkillsCol2.map(skillRow))
               ),
               h2("Sekundära färdigheter"),
-              div(children <-- sheetVar.signal.map(_.map(_.secondarySkills).getOrElse(Nil).zipWithIndex.map { case (sk, i) => secondarySkillRow(i, sk) })),
+              div(
+                children <-- sheetVar.signal
+                  .map(_.map(_.secondarySkills.indices.toList).getOrElse(Nil))
+                  .split(identity)((idx, _, _) => secondarySkillRow(idx))
+              ),
               button(
                 tpe := "button",
                 "Lägg till sekundär färdighet",
-                onClick --> (_ => update(s => s.copy(secondarySkills = s.secondarySkills :+ SecondarySkill("", 0))))
+                onClick --> (_ => update(s => s.copy(secondarySkills = s.secondarySkills :+ SecondarySkill("", 0, Attribute.Strength, false))))
               )
             ),
             div(
-              cls := "combat-section",
-              h2("Strid & förflyttning"),
-              textField("Skadebonus STY", _.combatStats.damageBonusStr, (s, v) => s.copy(combatStats = s.combatStats.copy(damageBonusStr = v))),
-              textField("Skadebonus SMI", _.combatStats.damageBonusAgl, (s, v) => s.copy(combatStats = s.combatStats.copy(damageBonusAgl = v))),
-              intField("Förflyttning", _.combatStats.movement, (s, v) => s.copy(combatStats = s.combatStats.copy(movement = v)))
-            ),
-            div(
-              cls := "resources-section",
-              h2("Poäng"),
-              resourceTrack("Viljepoäng", "willpower", _.willpower, (r, v) => r.copy(willpower = v)),
-              resourceTrack(
-                "Kroppspoäng",
-                "body-points",
-                _.bodyPoints,
-                (r, v) => r.copy(bodyPoints = v),
+              cls := "col-3 stack",
+              div(
+                cls := "inventory-section",
+                h2("Packning"),
+                intField("Bärförmåga", _.inventory.carryCapacity, (s, v) => s.copy(inventory = s.inventory.copy(carryCapacity = v))),
                 div(
-                  cls := "death-rolls",
-                  intField(
-                    "Lyckade dödsslag",
-                    _.resources.deathRolls.successes,
-                    (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(successes = v)))
-                  ),
-                  intField(
-                    "Misslyckade dödsslag",
-                    _.resources.deathRolls.failures,
-                    (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(failures = v)))
+                  children <-- sheetVar.signal
+                    .map(_.map(_.inventory.items.indices.toList).getOrElse(Nil))
+                    .split(identity)((idx, _, _) => itemRow(idx))
+                ),
+                button(
+                  tpe := "button",
+                  "Lägg till sak",
+                  onClick --> (_ => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items :+ InventoryItem("")))))
+                ),
+                textField("Minnessak", _.inventory.keepsake, (s, v) => s.copy(inventory = s.inventory.copy(keepsake = v)))
+              ),
+              div(
+                cls := "resources-section",
+                resourceTrack("Viljepoäng", "willpower", _.willpower, (r, v) => r.copy(willpower = v)),
+                resourceTrack(
+                  "Kroppspoäng",
+                  "body-points",
+                  _.bodyPoints,
+                  (r, v) => r.copy(bodyPoints = v),
+                  div(
+                    cls := "death-rolls",
+                    // Death rolls only come into play at 0 body points, so
+                    // keep them out of the way otherwise instead of always
+                    // taking up space.
+                    cls("hidden") <-- sheetVar.signal.map(_.exists(_.resources.bodyPoints.current.toInt > 0)),
+                    intField(
+                      "Lyckade dödsslag",
+                      _.resources.deathRolls.successes,
+                      (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(successes = v)))
+                    ),
+                    intField(
+                      "Misslyckade dödsslag",
+                      _.resources.deathRolls.failures,
+                      (s, v) => s.copy(resources = s.resources.copy(deathRolls = s.resources.deathRolls.copy(failures = v)))
+                    )
                   )
                 )
               )
             ),
             div(
-              cls := "abilities-section full-width",
-              h2("Förmågor & besvärjelser"),
-              textArea(
-                rows := 6,
-                value <-- sheetVar.signal.map(_.map(_.abilitiesText).getOrElse("")),
-                onInput.mapToValue --> (v => update(s => s.copy(abilitiesText = v)))
-              )
-            ),
-            div(cls := "divider"),
-            div(
-              cls := "armor-section",
+              cls := "armor-section col-6",
               h2("Rustning & hjälm"),
               div(
-                cls := "armor-row",
-                div(cls := "icon-shield"),
-                intField("Skyddsvärde rustning", _.armor.protection, (s, v) => s.copy(armor = s.armor.copy(protection = v))),
-                checkboxField("Nackdel: Smyga", _.armor.penalties.sneaking, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(sneaking = v)))),
-                checkboxField("Nackdel: Undvika", _.armor.penalties.evade, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(evade = v)))),
-                checkboxField(
-                  "Nackdel: Hoppa & klättra",
-                  _.armor.penalties.acrobatics,
-                  (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(acrobatics = v)))
-                )
-              ),
-              div(
-                cls := "armor-row",
-                div(cls := "icon-helmet"),
-                intField("Skyddsvärde hjälm", _.armor.helmetProtection, (s, v) => s.copy(armor = s.armor.copy(helmetProtection = v))),
-                checkboxField(
-                  "Nackdel: Upptäcka fara",
-                  _.armor.helmetPenalties.spotHidden,
-                  (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(spotHidden = v)))
+                cls := "armor-groups",
+                div(
+                  cls := "armor-group",
+                  textField("Rustningstyp", _.armor.armorType, (s, v) => s.copy(armor = s.armor.copy(armorType = v))),
+                  div(
+                    cls := "armor-row",
+                    div(cls := "icon-shield"),
+                    intField("Skyddsvärde rustning", _.armor.protection, (s, v) => s.copy(armor = s.armor.copy(protection = v))),
+                    checkboxField("Nackdel: Smyga", _.armor.penalties.sneaking, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(sneaking = v)))),
+                    checkboxField("Nackdel: Undvika", _.armor.penalties.evade, (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(evade = v)))),
+                    checkboxField(
+                      "Nackdel: Hoppa & klättra",
+                      _.armor.penalties.acrobatics,
+                      (s, v) => s.copy(armor = s.armor.copy(penalties = s.armor.penalties.copy(acrobatics = v)))
+                    )
+                  )
                 ),
-                checkboxField(
-                  "Nackdel: Avståndsattacker",
-                  _.armor.helmetPenalties.rangedAttacks,
-                  (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(rangedAttacks = v)))
+                div(cls := "armor-divider"),
+                div(
+                  cls := "armor-group",
+                  textField("Hjälmtyp", _.armor.helmetType, (s, v) => s.copy(armor = s.armor.copy(helmetType = v))),
+                  div(
+                    cls := "armor-row",
+                    div(cls := "icon-helmet"),
+                    intField("Skyddsvärde hjälm", _.armor.helmetProtection, (s, v) => s.copy(armor = s.armor.copy(helmetProtection = v))),
+                    checkboxField(
+                      "Nackdel: Upptäcka fara",
+                      _.armor.helmetPenalties.spotHidden,
+                      (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(spotHidden = v)))
+                    ),
+                    checkboxField(
+                      "Nackdel: Avståndsattacker",
+                      _.armor.helmetPenalties.rangedAttacks,
+                      (s, v) => s.copy(armor = s.armor.copy(helmetPenalties = s.armor.helmetPenalties.copy(rangedAttacks = v)))
+                    )
+                  )
                 )
               )
             ),
             div(
-              cls := "weapons-section full-width",
+              cls := "weapons-section col-6",
               h2("Vapen"),
-              div(children <-- sheetVar.signal.map(_.map(_.weapons).getOrElse(Nil).zipWithIndex.map { case (w, i) => weaponRow(i, w) })),
+              weaponTableHeader,
+              div(
+                children <-- sheetVar.signal
+                  .map(_.map(_.weapons.indices.toList).getOrElse(Nil))
+                  .split(identity)((idx, _, _) => weaponRow(idx))
+              ),
               button(
                 tpe := "button",
                 "Lägg till vapen",
-                onClick --> (_ => update(s => s.copy(weapons = s.weapons :+ Weapon("", "", "", "", "", ""))))
+                onClick --> (_ => update(s => s.copy(weapons = s.weapons :+ Weapon("", Grip.OneHanded, "", "", "", Set.empty))))
               )
-            ),
-            div(
-              cls := "inventory-section full-width",
-              h2("Packning"),
-              intField("Bärförmåga", _.inventory.carryCapacity, (s, v) => s.copy(inventory = s.inventory.copy(carryCapacity = v))),
-              div(children <-- sheetVar.signal.map(_.map(_.inventory.items).getOrElse(Nil).zipWithIndex.map { case (it, i) => itemRow(i, it) })),
-              button(
-                tpe := "button",
-                "Lägg till sak",
-                onClick --> (_ => update(s => s.copy(inventory = s.inventory.copy(items = s.inventory.items :+ InventoryItem("")))))
-              ),
-              textField("Minnessak", _.inventory.keepsake, (s, v) => s.copy(inventory = s.inventory.copy(keepsake = v)))
-            ),
-            div(
-              cls := "currency-section",
-              h2("Pengar"),
-              div(cls := "currency-pill", intField("Guldmynt", _.currency.gold, (s, v) => s.copy(currency = s.currency.copy(gold = v)))),
-              div(cls := "currency-pill", intField("Silvermynt", _.currency.silver, (s, v) => s.copy(currency = s.currency.copy(silver = v)))),
-              div(cls := "currency-pill", intField("Kopparmynt", _.currency.copper, (s, v) => s.copy(currency = s.currency.copy(copper = v))))
             )
           )
       }

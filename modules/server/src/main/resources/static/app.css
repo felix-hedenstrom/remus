@@ -39,7 +39,7 @@ body {
 }
 
 #app {
-  max-width: 980px;
+  max-width: 1500px;
   margin-inline: auto;
 }
 
@@ -62,8 +62,8 @@ h2 {
   clip-path: polygon(0 18%, 3% 0, 97% 0, 100% 18%, 100% 82%, 97% 100%, 3% 100%, 0 82%);
   filter: drop-shadow(0 1px 0 var(--metal-bronze)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
   text-align: center;
-  padding: 0.4rem 1.5rem;
-  margin: 1.25rem auto 0.75rem;
+  padding: 0.15rem 1rem;
+  margin: 0.2rem auto;
   width: fit-content;
   min-width: 55%;
 }
@@ -71,7 +71,6 @@ h2 {
 /* panels */
 section,
 .header-section,
-.combat-section,
 .resources-section,
 .skills-section,
 .abilities-section,
@@ -80,19 +79,23 @@ section,
 .inventory-section,
 .currency-section,
 .attributes-section {
-  background: var(--parchment);
+  background:
+    radial-gradient(circle at 15% 20%, rgba(90, 70, 40, 0.05), transparent 40%),
+    radial-gradient(circle at 85% 75%, rgba(90, 70, 40, 0.05), transparent 45%),
+    radial-gradient(circle at 60% 15%, rgba(90, 70, 40, 0.04), transparent 35%),
+    var(--parchment);
   border: 1px solid var(--metal-bronze);
   box-shadow: inset 0 0 0 1px var(--moss-dark), 0 3px 8px rgba(0, 0, 0, 0.35);
   border-radius: 6px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
+  padding: 0.3rem 0.5rem;
+  margin-bottom: 0.35rem;
 }
 
 .sheet-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(12, 1fr);
   align-items: start;
-  gap: 1rem;
+  gap: 0.6rem;
 }
 
 .sheet-grid > * { margin-bottom: 0; }
@@ -101,20 +104,21 @@ section,
   grid-column: 1 / -1;
 }
 
-.divider {
-  height: 28px;
-  margin: 0.25rem auto;
-  width: 220px;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 60'%3E%3Ccircle cx='50' cy='18' r='15' fill='none' stroke='%234a6741' stroke-width='4'/%3E%3Ccircle cx='36' cy='40' r='15' fill='none' stroke='%234a6741' stroke-width='4'/%3E%3Ccircle cx='64' cy='40' r='15' fill='none' stroke='%234a6741' stroke-width='4'/%3E%3C/svg%3E");
-  opacity: 0.8;
-}
+.sheet-grid > .col-3 { grid-column: span 3; }
+.sheet-grid > .col-4 { grid-column: span 4; }
+.sheet-grid > .col-6 { grid-column: span 6; }
+
+.sheet-grid > .stack { display: flex; flex-direction: column; }
 
 /* forms */
-.field { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.4rem; }
-.field-narrow { max-width: 8rem; }
+.field { display: flex; flex-direction: row; align-items: center; gap: 0.4rem; margin-bottom: 0.15rem; }
+.field > label { flex: 0 0 auto; white-space: nowrap; }
+.field > input, .field > select { flex: 1; min-width: 0; }
+.field-narrow > input, .field-narrow > select { max-width: 4.5rem; }
+
+.field-select-custom { flex-wrap: wrap; }
+.field-select-custom select { flex: 0 0 auto; }
+.field-select-custom input[type="text"] { flex: 1; min-width: 6rem; }
 
 .header-section {
   display: grid;
@@ -124,14 +128,57 @@ section,
 }
 .header-section > h2 { grid-column: 1 / -1; }
 .header-section .field { margin-bottom: 0; }
+.header-section .field > label { width: 6rem; flex: 0 0 auto; }
 
-.combat-section {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
-  align-items: flex-end;
+/* themed +/- stepper wrapping a number input, used anywhere a plain numeric
+   field appears (skills, resources, currency, armor, carry capacity, ...) */
+.num-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--metal-bronze);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
-.combat-section > h2 { flex-basis: 100%; }
+
+.num-stepper button.num-step {
+  width: 1.1rem;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  background: linear-gradient(180deg, var(--wood-light), var(--wood-mid));
+  color: var(--parchment);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.num-stepper button.num-step:hover { background: linear-gradient(180deg, var(--wood-mid), var(--wood-dark)); }
+.num-stepper button.num-step:active { filter: brightness(0.85); }
+
+.num-stepper input[type="number"] {
+  width: 2.2rem;
+  padding: 0.25rem 0.2rem;
+  text-align: center;
+  border: none;
+  border-left: 1px solid var(--metal-bronze);
+  border-right: 1px solid var(--metal-bronze);
+  border-radius: 0;
+}
+
+.combat-strip {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-top: 0.3rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--metal-bronze);
+}
 
 label {
   font-size: 0.82rem;
@@ -159,6 +206,76 @@ input[type="number"]:focus,
 textarea:focus {
   outline: 2px solid var(--moss);
   outline-offset: 1px;
+}
+
+/* Firefox always shows the native up/down stepper on number inputs (Chrome
+   only on hover/focus); hide it everywhere so the parchment theme isn't
+   broken by a stray OS-chrome widget. */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+select {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.3rem 1.9rem 0.3rem 0.6rem;
+  border-radius: 3px;
+  border: 1px solid var(--metal-bronze);
+  background-color: var(--moss);
+  color: var(--parchment);
+  /* The page is color-scheme: light overall, which tells Firefox to use its
+     light native widget palette for form controls still under any native
+     rendering - fighting our dark custom background. Scoping dark just to
+     selects stops Firefox from painting light chrome underneath our colors. */
+  color-scheme: dark;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23e8dcc0'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 9px 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+select:hover {
+  background-color: var(--moss-light);
+}
+
+select:focus,
+select:active,
+select:focus-visible {
+  background-color: var(--moss);
+  color: var(--parchment);
+  outline: 2px solid var(--metal-bronze);
+  outline-offset: 1px;
+}
+
+select:hover:focus {
+  background-color: var(--moss-light);
+}
+
+/* Firefox renders its native dotted focus ring using the text color, which
+   makes a dark-on-dark select look broken even with -moz-appearance: none.
+   This standard trick hides that ring without affecting real text color. */
+select:-moz-focusring {
+  color: transparent;
+  text-shadow: 0 0 0 var(--parchment);
+}
+
+select option {
+  background: var(--parchment);
+  color: var(--ink);
+  font-weight: 400;
 }
 
 .checkbox-field {
@@ -212,6 +329,9 @@ button.active { text-decoration: underline; }
   margin-bottom: 1.25rem;
 }
 
+.save-group { display: flex; align-items: center; gap: 0.6rem; }
+.save-status { color: var(--moss-dark); font-weight: 600; }
+
 /* login */
 .login-view {
   text-align: center;
@@ -248,35 +368,92 @@ button.active { text-decoration: underline; }
   text-align: center;
   font-size: 1.2rem;
   font-weight: 700;
-  border-radius: 50%;
   aspect-ratio: 1;
+}
+
+/* Pre-existing specificity bug: the shared `input[type="number"]` rule's
+   attribute selector outweighs a plain class, so border-radius needs the
+   same specificity here (type selector + class) to actually win. */
+input.attribute-value {
+  border-radius: 50%;
+}
+
+/* a mossy ring around the score, echoing the h2 banner gradient so the
+   attributes band reads as part of the same visual family as the rest
+   of the sheet instead of a bare row of circles */
+.attribute-ring {
+  width: 3.8rem;
+  height: 3.8rem;
+  border-radius: 50%;
+  background: conic-gradient(var(--moss-light) 0deg 216deg, var(--parchment-dark) 216deg 360deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.attribute-ring .attribute-value {
+  width: 2.9rem;
+}
+
+.attribute-toggle-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--metal-iron);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.attribute-toggle {
+  appearance: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  border: 1px solid var(--metal-bronze);
+  background: var(--parchment-dark);
+  margin: 0;
+  cursor: pointer;
+}
+
+.attribute-toggle:checked {
+  background: var(--blood-accent);
+  border-color: var(--blood-accent);
 }
 
 /* resources / pip trackers */
 .resource-track {
   border: 1px solid var(--metal-bronze);
   border-radius: 6px;
-  padding: 0.6rem 0.8rem;
-  margin-bottom: 0.75rem;
+  padding: 0.3rem 0.5rem;
+  margin-bottom: 0.3rem;
   background: var(--parchment-dark);
+}
+
+.resource-track:last-child {
+  margin-bottom: 0;
 }
 
 .resource-track .resource-name {
   font-family: var(--font-display);
   font-weight: 700;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.95rem;
 }
 
 .pip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-bottom: 0.4rem;
+  gap: 0.22rem;
+  margin-bottom: 0.3rem;
 }
 
 .pip {
-  width: 1rem;
-  height: 1rem;
+  width: 0.8rem;
+  height: 0.8rem;
   border-radius: 50%;
   border: 1px solid var(--metal-bronze);
   background: var(--parchment);
@@ -287,68 +464,167 @@ button.active { text-decoration: underline; }
 .resource-track.body-points .pip.filled { background: var(--blood-accent); border-color: var(--blood-accent); }
 
 .resource-max {
-  width: 4rem;
+  width: 3.2rem;
 }
 
 .death-rolls {
   display: flex;
-  gap: 1rem;
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
   border-top: 1px dashed var(--metal-bronze);
 }
 
+.death-rolls .field-narrow > input, .death-rolls .field-narrow > select { max-width: 6rem; }
+.death-rolls.hidden { display: none; }
+
 /* skills */
-.skills-grid { display: flex; gap: 1.5rem; margin-bottom: 0.75rem; }
+.skills-grid { display: flex; gap: 1.5rem; margin-bottom: 0.5rem; }
 .skills-col { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
 
-.skill-row { display: flex; align-items: center; gap: 0.5rem; }
-.skill-row::before { content: "◆"; color: var(--metal-bronze); font-size: 0.7rem; }
+.skill-row { display: flex; align-items: center; gap: 0.4rem; }
+.skill-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+/* Hollow vs filled diamond, not just a shade/size change, so marked state
+   reads clearly at a glance instead of blending into the unmarked rows. */
+.skill-mark::before { content: "◇"; color: var(--metal-bronze); font-size: 0.85rem; }
+.skill-mark.marked::before { content: "◆"; color: var(--blood-accent); font-size: 0.95rem; }
 .skill-name { flex: 1; }
 .skill-attr { color: var(--metal-iron); opacity: 0.75; width: 3rem; font-size: 0.85rem; }
 .skill-value { width: 3rem; }
 
-.weapon-row, .item-row, .secondary-skill-row {
+.item-row, .secondary-skill-row {
   display: flex;
   gap: 0.4rem;
   margin-bottom: 0.3rem;
   align-items: center;
 }
 
-.secondary-skill-row::before { content: "◆"; color: var(--metal-bronze); font-size: 0.7rem; }
+.secondary-skill-name { flex: 1; min-width: 0; }
+.secondary-skill-attr { padding: 0.25rem 1.6rem 0.25rem 0.4rem; font-size: 0.78rem; }
+
+/* weapon table - header and rows share one column grid so labels line up */
+.weapon-row {
+  display: grid;
+  grid-template-columns: 2fr 0.7fr 0.8fr 0.8fr 0.9fr 1.3fr auto;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+  align-items: center;
+}
+
+.weapon-row > input, .weapon-row > select, .weapon-row > span, .weapon-row > details { min-width: 0; }
+
+.weapon-properties { position: relative; }
+
+.weapon-properties > summary {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  border: 1px solid var(--metal-bronze);
+  background: var(--parchment-dark);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weapon-properties-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 5;
+  background: var(--parchment);
+  border: 1px solid var(--metal-bronze);
+  border-radius: 4px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  padding: 0.4rem 0.6rem;
+  margin-top: 0.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 11rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.weapon-table-header {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--metal-iron);
+  border-bottom: 1px solid var(--metal-bronze);
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+.remove-row {
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--blood-accent);
+  line-height: 1;
+  font-size: 1rem;
+}
 
 /* armor */
-.armor-section { display: flex; flex-direction: column; gap: 0.75rem; }
+.armor-groups { display: flex; align-items: stretch; gap: 1.25rem; }
+.armor-group { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.armor-divider { width: 1px; align-self: stretch; background: var(--metal-bronze); opacity: 0.6; }
 .armor-row { display: flex; align-items: center; gap: 0.5rem 0.75rem; flex-wrap: wrap; }
 .armor-row .field-narrow { flex: 0 0 auto; }
 
 .icon-shield, .icon-helmet {
-  width: 2.2rem;
-  height: 2.2rem;
-  background: var(--moss);
-  border: 1px solid var(--metal-bronze);
+  width: 2.4rem;
+  height: 2.4rem;
   flex-shrink: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
 }
 
-.icon-shield { clip-path: polygon(50% 0%, 100% 20%, 100% 55%, 50% 100%, 0% 55%, 0% 20%); }
-.icon-helmet { clip-path: polygon(50% 0%, 90% 25%, 90% 100%, 10% 100%, 10% 25%); border-radius: 50% 50% 0 0 / 60% 60% 0 0; }
+/* a breastplate: hexagonal body with a V-neck collar line */
+.icon-shield {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 L18 5 L19 12 L16 14 L16 20 L8 20 L8 14 L5 12 L6 5 Z' fill='%234a6741' stroke='%238a6d3b' stroke-width='1'/%3E%3Cpath d='M12 2 L12 9 M9 6 L12 9 L15 6' fill='none' stroke='%238a6d3b' stroke-width='1'/%3E%3C/svg%3E");
+}
+
+/* a helmet: domed bowl, brim line and a nose guard */
+.icon-helmet {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 14 C4 6 8 3 12 3 C16 3 20 6 20 14 L20 16 L4 16 Z' fill='%234a6741' stroke='%238a6d3b' stroke-width='1'/%3E%3Crect x='10.5' y='14' width='3' height='7' fill='%234a6741' stroke='%238a6d3b' stroke-width='1'/%3E%3Cline x1='4' y1='11' x2='20' y2='11' stroke='%238a6d3b' stroke-width='1'/%3E%3C/svg%3E");
+}
 
 /* currency */
-.currency-section { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.currency-section { display: flex; flex-direction: column; gap: 0.4rem; }
 
-.currency-pill {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--moss);
-  color: var(--parchment);
-  border: 1px solid var(--metal-bronze);
-  border-radius: 999px;
-  padding: 0.3rem 0.9rem;
+.currency-row { display: flex; align-items: center; gap: 0.6rem; }
+
+.currency-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid var(--metal-iron);
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.35);
 }
 
-.currency-pill label { color: var(--parchment); }
-.currency-pill input { width: 4rem; }
+.currency-icon.gold { background: radial-gradient(circle at 35% 30%, #f5d66b, #c9a227 70%); }
+.currency-icon.silver { background: radial-gradient(circle at 35% 30%, #f2f2f2, #a8a8a8 70%); }
+.currency-icon.copper { background: radial-gradient(circle at 35% 30%, #e3a471, #a9601f 70%); }
+
+.currency-row input { flex: 1; width: auto; min-width: 0; }
 
 /* character list */
 .character-row {
@@ -359,7 +635,8 @@ button.active { text-decoration: underline; }
   border-bottom: 1px solid var(--metal-bronze);
 }
 
-.character-row .name { font-weight: 700; min-width: 10rem; }
+.character-row .name { font-weight: 700; min-width: 10rem; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; }
+.character-row .name:hover { text-decoration-color: var(--metal-iron); }
 .character-row .meta { opacity: 0.75; flex: 1; }
 
 .error-banner {
@@ -376,12 +653,3 @@ button.active { text-decoration: underline; }
 .error-banner button { color: var(--parchment); border-color: var(--parchment); background: transparent; }
 
 .mode-toggle { margin-bottom: 1rem; }
-
-@media (max-width: 720px) {
-  .sheet-grid { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 640px) {
-  h2 { min-width: 85%; font-size: 1rem; }
-  .skills-grid { flex-direction: column; gap: 0.5rem; }
-}

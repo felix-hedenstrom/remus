@@ -2,9 +2,9 @@ package dnd.shared
 
 final case class Weapon(
                          name: String,
-                         grip: String,
+                         grip: Grip,
                          range: String,
                          damage: String,
                          breakValue: String,
-                         properties: String
+                         properties: Set[WeaponProperty]
                        ) derives Codec, Schema

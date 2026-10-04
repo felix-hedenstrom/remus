@@ -1,14 +1,15 @@
 package dnd.shared
 
+import io.github.iltotore.iron.autoRefine
+
 final case class CharacterHeader(
-                                  name: String,
-                                  playerName: String,
-                                  species: String,
-                                  ageCategory: String,
-                                  profession: String,
-                                  weakness: String,
-                                  appearance: String
+                                  name: NonEmptyString,
+                                  species: Species,
+                                  ageCategory: AgeCategory,
+                                  profession: Profession,
+                                  weakness: NonEmptyString,
+                                  appearance: NonEmptyString
                                 ) derives Codec, Schema
 
 object CharacterHeader:
-  val default: CharacterHeader = CharacterHeader("", "", "", "", "", "", "")
+  val default: CharacterHeader = CharacterHeader("<name>", Species.Human, AgeCategory.Adult, Profession.Warrior, "<weakness>", "<appearance>")

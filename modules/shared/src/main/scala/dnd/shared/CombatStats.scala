@@ -4,10 +4,10 @@ import io.github.iltotore.iron.autoRefine
 import sttp.tapir.codec.iron.given
 
 final case class CombatStats(
-    damageBonusStr: String,
-    damageBonusAgl: String,
+    damageBonusStr: DamageBonus,
+    damageBonusAgl: DamageBonus,
     movement: NonNegativeInt
 ) derives Codec, Schema
 
 object CombatStats:
-  val default: CombatStats = CombatStats("-", "-", 10)
+  val default: CombatStats = CombatStats(DamageBonus.None, DamageBonus.None, 10)

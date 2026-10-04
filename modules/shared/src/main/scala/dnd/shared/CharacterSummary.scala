@@ -7,6 +7,6 @@ import sttp.tapir.codec.iron.given
 case class CharacterSummary(
                              id: CharacterId,
                              name: String,
-                             species: String,
-                             profession: String
+                             species: Species,
+                             profession: Profession
                            ) derives Codec, Schema
