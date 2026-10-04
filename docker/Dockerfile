@@ -12,7 +12,7 @@ COPY modules modules
 # into the jar's resources, and packages the server jar. copyRuntimeDeps then
 # copies the runtime classpath as plain jars (no sbt-assembly/native-packager:
 # neither is published for sbt 2.x yet).
-RUN sbt server/Compile/packageBin server/copyRuntimeDeps
+RUN sbt "server/Compile/packageBin; server/copyRuntimeDeps"
 
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
