@@ -56,9 +56,9 @@ object CharacterListView:
         h1("Dina karaktärer"),
         button(tpe := "button", "Logga ut", onClick --> (_ => logout()))
       ),
-      button(tpe := "button", "Skapa ny karaktär", onClick --> (_ => createCharacter())),
+      button(tpe := "button", cls := "primary", "Skapa ny karaktär", onClick --> (_ => createCharacter())),
       div(
-        cls := "character-rows",
+        cls := "character-rows panel",
         children <-- characters.signal.map(_.map { c =>
           div(
             cls := "character-row",
@@ -68,7 +68,7 @@ object CharacterListView:
               if c.name.trim.isEmpty then "(namnlös)" else c.name
             ),
             span(cls := "meta", s"${Labels.species(c.species)} ${Labels.profession(c.profession)}".trim),
-            button(tpe := "button", "Ta bort", onClick --> (_ => deleteCharacter(c.id)))
+            button(tpe := "button", cls := "danger", "Ta bort", onClick --> (_ => deleteCharacter(c.id)))
           )
         })
       )

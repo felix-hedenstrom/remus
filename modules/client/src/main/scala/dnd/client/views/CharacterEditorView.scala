@@ -258,6 +258,9 @@ object CharacterEditorView:
     // the same get/set the input itself uses, so every call site stays the
     // source of truth for how its value is read and clamped (parseNonNegative
     // already floors at 0, so a decrement below 0 settles at 0 for free).
+    def sectionHeader(title: String, iconClass: String) =
+      h2(span(cls := s"h2-icon $iconClass"), title)
+
     def stepButton(symbol: String, onClick0: () => Unit) =
       button(tpe := "button", cls := "num-step", symbol, onClick --> (_ => onClick0()))
 
@@ -357,15 +360,21 @@ object CharacterEditorView:
             val max     = track.map(_.max.toInt).getOrElse(0)
             val current = track.map(_.current.toInt).getOrElse(0)
             (1 to max).map { i =>
+              def toggle(): Unit =
+                update { s =>
+                  val t          = get(s.resources)
+                  val newCurrent = if t.current.toInt == i then i - 1 else i
+                  s.copy(resources = set(s.resources, t.copy(current = parseNonNegative(newCurrent.toString))))
+                }
               div(
                 cls := ("pip" + (if i <= current then " filled" else "")),
-                onClick --> (_ =>
-                  update { s =>
-                    val t          = get(s.resources)
-                    val newCurrent = if t.current.toInt == i then i - 1 else i
-                    s.copy(resources = set(s.resources, t.copy(current = parseNonNegative(newCurrent.toString))))
-                  }
-                )
+                tabIndex := 0,
+                onClick --> (_ => toggle()),
+                onKeyDown --> { ev =>
+                  if ev.key == "Enter" || ev.key == " " then
+                    ev.preventDefault()
+                    toggle()
+                }
               )
             }
           }
@@ -408,8 +417,14 @@ object CharacterEditorView:
         span(
           cls := "skill-mark",
           cls("marked") <-- sheetVar.signal.map(_.flatMap(_.skills.find(_.skill == skill)).exists(_.markedForAdvancement)),
+          tabIndex := 0,
           title := "Markera för färdighetsökning (vid ett resultat av 1 eller 20)",
-          onClick --> (_ => toggleSkillMark(skill))
+          onClick --> (_ => toggleSkillMark(skill)),
+          onKeyDown --> { ev =>
+            if ev.key == "Enter" || ev.key == " " then
+              ev.preventDefault()
+              toggleSkillMark(skill)
+          }
         ),
         span(cls := "skill-name", Labels.skill(skill)),
         span(cls := "skill-attr", Labels.attribute(skill.attribute)),
@@ -546,8 +561,14 @@ object CharacterEditorView:
         span(
           cls := "skill-mark",
           cls("marked") <-- sheetVar.signal.map(skillAt(_).exists(_.markedForAdvancement)),
+          tabIndex := 0,
           title := "Markera för färdighetsökning (vid ett resultat av 1 eller 20)",
-          onClick --> (_ => updateSecondarySkill(index)(sk => sk.copy(markedForAdvancement = !sk.markedForAdvancement)))
+          onClick --> (_ => updateSecondarySkill(index)(sk => sk.copy(markedForAdvancement = !sk.markedForAdvancement))),
+          onKeyDown --> { ev =>
+            if ev.key == "Enter" || ev.key == " " then
+              ev.preventDefault()
+              updateSecondarySkill(index)(sk => sk.copy(markedForAdvancement = !sk.markedForAdvancement))
+          }
         ),
         input(
           typ := "text",
@@ -598,7 +619,7 @@ object CharacterEditorView:
         // visibly jumped whenever "Sparat!" appeared or cleared.
         div(
           cls := "save-group",
-          button(tpe := "button", disabled <-- saving.signal, "Spara", onClick --> (_ => save())),
+          button(tpe := "button", cls := "primary", disabled <-- saving.signal, "Spara", onClick --> (_ => save())),
           span(cls := "save-status", child.text <-- savedJustNow.signal.map(if _ then "Sparat!" else ""))
         )
       ),
@@ -630,7 +651,7 @@ object CharacterEditorView:
               ),
               div(
                 cls := "weapons-section",
-                h2("Vapen"),
+                sectionHeader("Vapen", "icon-sword"),
                 weaponTableHeader,
                 div(
                   children <-- sheetVar.signal
@@ -664,7 +685,7 @@ object CharacterEditorView:
               cls := "col-3 stack",
               div(
                 cls := "abilities-section",
-                h2("Förmågor & besvärjelser"),
+                sectionHeader("Förmågor & besvärjelser", "icon-book"),
                 div(
                   children <-- sheetVar.signal
                     .map(_.map(_.abilities.indices.toList).getOrElse(Nil))
@@ -703,19 +724,19 @@ object CharacterEditorView:
             ),
             div(
               cls := "skills-section col-6",
-              h2("Färdigheter"),
+              sectionHeader("Färdigheter", "icon-scroll"),
               div(
                 cls := "skills-grid",
                 div(cls := "skills-col", generalSkillsCol1.map(skillRow)),
                 div(cls := "skills-col", generalSkillsCol2.map(skillRow))
               ),
-              h2("Vapenfärdigheter"),
+              sectionHeader("Vapenfärdigheter", "icon-scroll"),
               div(
                 cls := "skills-grid",
                 div(cls := "skills-col", weaponSkillsCol1.map(skillRow)),
                 div(cls := "skills-col", weaponSkillsCol2.map(skillRow))
               ),
-              h2("Sekundära färdigheter"),
+              sectionHeader("Sekundära färdigheter", "icon-scroll"),
               div(
                 children <-- sheetVar.signal
                   .map(_.map(_.secondarySkills.indices.toList).getOrElse(Nil))
@@ -731,7 +752,7 @@ object CharacterEditorView:
               cls := "col-3 stack",
               div(
                 cls := "inventory-section",
-                h2("Packning"),
+                sectionHeader("Packning", "icon-backpack"),
                 intField("Bärförmåga", _.inventory.carryCapacity, (s, v) => s.copy(inventory = s.inventory.copy(carryCapacity = v))),
                 div(
                   children <-- sheetVar.signal
@@ -753,7 +774,7 @@ object CharacterEditorView:
               ),
               div(
                 cls := "armor-section",
-                h2("Rustning"),
+                sectionHeader("Rustning", "icon-shield"),
                 textField("Rustningstyp", _.armor.armorType, (s, v) => s.copy(armor = s.armor.copy(armorType = v))),
                 div(
                   cls := "armor-row",
@@ -770,7 +791,7 @@ object CharacterEditorView:
               ),
               div(
                 cls := "helmet-section",
-                h2("Hjälm"),
+                sectionHeader("Hjälm", "icon-helmet"),
                 textField("Hjälmtyp", _.armor.helmetType, (s, v) => s.copy(armor = s.armor.copy(helmetType = v))),
                 div(
                   cls := "armor-row",
